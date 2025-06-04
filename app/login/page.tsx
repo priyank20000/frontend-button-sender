@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Cookies from 'js-cookie'; // Import js-cookie
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -20,7 +21,7 @@ export default function Login() {
     setError('');
 
     try {
-      const response = await fetch('https://bulkwhasapp-backend.onrender.com/api/login', {
+      const response = await fetch('https://whatsapp.recuperafly.com/api/user/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -30,12 +31,22 @@ export default function Login() {
 
       const data = await response.json();
 
-      if (data.status) {
-        localStorage.setItem('token', data.data.token);
-        localStorage.setItem('user', JSON.stringify(data.data.user));
+      if (data.success) {
+        // Store token in a cookie
+        Cookies.set('token', data.token, {
+          expires: 1, // Cookie expires in 1 day
+          secure: true, // Only sent over HTTPS
+          sameSite: 'Strict', // Prevents CSRF
+        });
+        // Optionally store user data in localStorage or cookie
+        Cookies.set('user', JSON.stringify(data.user), {
+          expires: 1,
+          secure: true,
+          sameSite: 'Strict',
+        });
         router.push('/dashboard');
       } else {
-        setError(data.message);
+        setError(data.message || 'Failed to login. Please check your credentials.');
       }
     } catch (err) {
       setError('Failed to login. Please try again.');

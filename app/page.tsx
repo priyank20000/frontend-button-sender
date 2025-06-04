@@ -33,7 +33,7 @@ export default function Home() {
               Login to your account to continue sending messages and managing your WhatsApp connections.
             </p>
             <Button asChild className="w-full bg-zinc-800 hover:bg-zinc-700">
-              <a href="/dashboard">Login</a>
+              <a href="/login ">Login</a>
             </Button>
           </Card>
         </div>

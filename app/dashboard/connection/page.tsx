@@ -67,7 +67,7 @@ export default function DevicesPage() {
     const fetchInstances = async () => {
       const token = Cookies.get('token');
       if (!token) {
-        router.push('/login');
+        router.push('/');
         return;
       }
 
@@ -104,7 +104,7 @@ export default function DevicesPage() {
       interval = setInterval(async () => {
         const token = Cookies.get('token');
         if (!token) {
-          router.push('/login');
+          router.push('/');
           return;
         }
 
@@ -143,7 +143,7 @@ export default function DevicesPage() {
   const handleCreateInstance = async () => {
     const token = Cookies.get('token');
     if (!token) {
-      router.push('/login');
+      router.push('/');
       return;
     }
 
@@ -176,7 +176,7 @@ export default function DevicesPage() {
   const handleShowQR = async (instanceId: string) => {
     const token = Cookies.get('token');
     if (!token) {
-      router.push('/login');
+      router.push('/');
       return;
     }
 
@@ -210,7 +210,7 @@ export default function DevicesPage() {
   const handleDeleteInstance = async (instanceId: string) => {
     const token = Cookies.get('token');
     if (!token) {
-      router.push('/login');
+      router.push('/');
       return;
     }
 
@@ -247,7 +247,7 @@ export default function DevicesPage() {
   const handleLogoutInstance = async (instanceId: string) => {
     const token = Cookies.get('token');
     if (!token) {
-      router.push('/login');
+      router.push('/');
       return;
     }
 
@@ -295,7 +295,7 @@ export default function DevicesPage() {
   const handleEditInstance = async () => {
     const token = Cookies.get('token');
     if (!token) {
-      router.push('/login');
+      router.push('/');
       return;
     }
 

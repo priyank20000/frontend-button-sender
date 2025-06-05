@@ -60,17 +60,17 @@ export default function DevicesPage() {
 
   const router = useRouter();
 
-  const getToken = async () => {
-    let token = Cookies.get('token');
-    if (!token) {
-      token = localStorage.getItem('token');
-    }
-    if (!token) {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      token = Cookies.get('token') || localStorage.getItem('token');
-    }
-    return token;
-  };
+  const getToken = async (): Promise<string | null | undefined> => {
+  let token: string | null | undefined = Cookies.get('token');
+  if (!token) {
+    token = localStorage.getItem('token');
+  }
+  if (!token) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    token = Cookies.get('token') || localStorage.getItem('token');
+  }
+  return token;
+};
 
   const handleUnauthorized = () => {
     console.warn('Unauthorized response received');

@@ -1,4 +1,5 @@
 "use client";
+
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +11,7 @@ import Cookies from 'js-cookie';
 import { useRouter } from 'next/navigation';
 import { Toaster, toast } from 'react-hot-toast';
 import { Loader2 } from 'lucide-react';
+
 interface Template {
   _id?: string;
   name: string;
@@ -21,6 +23,7 @@ interface Template {
     button?: Button[];
   };
 }
+
 interface Button {
   name: string;
   type: 'REPLY' | 'URL' | 'PHONE_NUMBER' | 'UNSUBSCRIBE';
@@ -50,10 +53,34 @@ export default function Templates() {
   const [previewContent, setPreviewContent] = useState('');
   const [previewButtons, setPreviewButtons] = useState<Button[]>([]);
 
-  // Fetch templates
-  const fetchTemplates = async () => {
-    const token = Cookies.get('token');
+  const getToken = async (): Promise<string | null | undefined> => {
+    let token: string | null | undefined = Cookies.get('token');
     if (!token) {
+      token = localStorage.getItem('token');
+    }
+    if (!token) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+      token = Cookies.get('token') || localStorage.getItem('token');
+    }
+    return token;
+  };
+
+  const handleUnauthorized = () => {
+    console.warn('Unauthorized response received');
+    toast.error('Session expired. Please log in again.');
+    Cookies.remove('token', { path: '/', secure: window.location.protocol === 'https:', sameSite: 'Lax' });
+    localStorage.removeItem('token');
+    Cookies.remove('user', { path: '/', secure: window.location.protocol === 'https:', sameSite: 'Lax' });
+    localStorage.removeItem('user');
+    router.push('/login');
+  };
+
+  // Fetch templates
+  const fetchTemplates = useCallback(async () => {
+    const token = await getToken();
+    if (!token) {
+      console.warn('No token found in cookie or localStorage, redirecting to login');
+      toast.error('Please log in to access your templates');
       router.push('/login');
       return;
     }
@@ -68,6 +95,12 @@ export default function Templates() {
         },
         body: JSON.stringify({ page: currentPage, limit: templatesPerPage }),
       });
+
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+
       const data = await response.json();
       if (data.status) {
         const validTemplates = (data.templates || []).filter(
@@ -79,15 +112,15 @@ export default function Templates() {
         toast.error(data.message || 'Failed to fetch templates');
       }
     } catch (err) {
-      toast.error('Error fetching templates: ' );
+      toast.error('Error fetching templates: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [router, currentPage]);
 
   useEffect(() => {
     fetchTemplates();
-  }, [router, currentPage]);
+  }, [fetchTemplates]);
 
   // Initialize editor content when modal opens or editingTemplate changes
   useEffect(() => {
@@ -157,8 +190,10 @@ export default function Templates() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const token = Cookies.get('token');
+    const token = await getToken();
     if (!token) {
+      console.warn('No token found in cookie or localStorage, redirecting to login');
+      toast.error('Please log in to save template');
       router.push('/login');
       return;
     }
@@ -192,6 +227,12 @@ export default function Templates() {
         },
         body: JSON.stringify(payload),
       });
+
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+
       const data = await response.json();
 
       if (data.status && data.data) {
@@ -212,7 +253,7 @@ export default function Templates() {
         toast.error(data.message || 'Failed to save template');
       }
     } catch (err) {
-      toast.error('Error saving template: ' );
+      toast.error('Error saving template: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
       setIsSubmitting(false);
     }
@@ -304,8 +345,10 @@ export default function Templates() {
   };
 
   const handleDelete = async (id: string) => {
-    const token = Cookies.get('token');
+    const token = await getToken();
     if (!token) {
+      console.warn('No token found in cookie or localStorage, redirecting to login');
+      toast.error('Please log in to delete template');
       router.push('/login');
       return;
     }
@@ -320,6 +363,12 @@ export default function Templates() {
         },
         body: JSON.stringify({ templateId: id }),
       });
+
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+
       const data = await response.json();
 
       if (data.status) {
@@ -340,7 +389,7 @@ export default function Templates() {
         toast.error(data.message || 'Failed to delete template');
       }
     } catch (err) {
-      toast.error('Error deleting template: ' );
+      toast.error('Error deleting template: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
       setIsDeleting(prev => ({ ...prev, [id]: false }));
     }
@@ -383,7 +432,7 @@ export default function Templates() {
     if (!selection || !selection.rangeCount) return;
 
     const range = selection.getRangeAt(0);
-    const placeholder = value === 'name skylight' ? '{{name}}' : value === 'number' ? '{{number}}' : `{{var${value.split(' ')[1]}}}`;
+    const placeholder = value === 'name' ? '{{name}}' : value === 'number' ? '{{number}}' : `{{var${value.split(' ')[1]}}}`;
     range.insertNode(document.createTextNode(placeholder));
     range.collapse(false);
     selection.removeAllRanges();

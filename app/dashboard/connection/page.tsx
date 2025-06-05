@@ -60,16 +60,32 @@ export default function DevicesPage() {
 
   const router = useRouter();
 
-  const fetchInstances = useCallback(async () => {
+  const getToken = async () => {
     let token = Cookies.get('token');
     if (!token) {
-      // Retry after a short delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      token = Cookies.get('token');
+      token = localStorage.getItem('token');
     }
-
     if (!token) {
-      console.warn('No token found, redirecting to login');
+      await new Promise(resolve => setTimeout(resolve, 500));
+      token = Cookies.get('token') || localStorage.getItem('token');
+    }
+    return token;
+  };
+
+  const handleUnauthorized = () => {
+    console.warn('Unauthorized response received');
+    toast.error('Session expired. Please log in again.');
+    Cookies.remove('token', { path: '/', secure: window.location.protocol === 'https:', sameSite: 'Lax' });
+    localStorage.removeItem('token');
+    Cookies.remove('user', { path: '/', secure: window.location.protocol === 'https:', sameSite: 'Lax' });
+    localStorage.removeItem('user');
+    router.push('/login');
+  };
+
+  const fetchInstances = useCallback(async () => {
+    const token = await getToken();
+    if (!token) {
+      console.warn('No token found in cookie or localStorage, redirecting to login');
       toast.error('Please log in to access your devices');
       router.push('/login');
       return;
@@ -88,11 +104,7 @@ export default function DevicesPage() {
       });
 
       if (response.status === 401) {
-        console.warn('Unauthorized response received');
-        toast.error('Session expired. Please log in again.');
-        Cookies.remove('token');
-        Cookies.remove('user');
-        router.push('/login');
+        handleUnauthorized();
         return;
       }
 
@@ -119,7 +131,7 @@ export default function DevicesPage() {
     let interval: NodeJS.Timeout | undefined;
     if (showQR && selectedInstanceId) {
       interval = setInterval(async () => {
-        const token = Cookies.get('token');
+        const token = await getToken();
         if (!token) {
           console.warn('No token found during QR polling, redirecting to login');
           toast.error('Please log in to continue');
@@ -140,11 +152,7 @@ export default function DevicesPage() {
           });
 
           if (response.status === 401) {
-            console.warn('Unauthorized response during QR polling');
-            toast.error('Session expired. Please log in again.');
-            Cookies.remove('token');
-            Cookies.remove('user');
-            router.push('/login');
+            handleUnauthorized();
             setShowQR(false);
             clearInterval(interval);
             return;
@@ -173,7 +181,7 @@ export default function DevicesPage() {
   }, [showQR, selectedInstanceId, router]);
 
   const handleCreateInstance = async () => {
-    const token = Cookies.get('token');
+    const token = await getToken();
     if (!token) {
       toast.error('Please log in to create an instance');
       router.push('/login');
@@ -191,10 +199,7 @@ export default function DevicesPage() {
       });
 
       if (response.status === 401) {
-        toast.error('Session expired. Please log in again.');
-        Cookies.remove('token');
-        Cookies.remove('user');
-        router.push('/login');
+        handleUnauthorized();
         return;
       }
 
@@ -214,7 +219,7 @@ export default function DevicesPage() {
   };
 
   const handleShowQR = async (instanceId: string) => {
-    const token = Cookies.get('token');
+    const token = await getToken();
     if (!token) {
       toast.error('Please log in to view QR code');
       router.push('/login');
@@ -233,10 +238,7 @@ export default function DevicesPage() {
       });
 
       if (response.status === 401) {
-        toast.error('Session expired. Please log in again.');
-        Cookies.remove('token');
-        Cookies.remove('user');
-        router.push('/login');
+        handleUnauthorized();
         return;
       }
 
@@ -256,7 +258,7 @@ export default function DevicesPage() {
   };
 
   const handleDeleteInstance = async (instanceId: string) => {
-    const token = Cookies.get('token');
+    const token = await getToken();
     if (!token) {
       toast.error('Please log in to delete instance');
       router.push('/login');
@@ -275,10 +277,7 @@ export default function DevicesPage() {
       });
 
       if (response.status === 401) {
-        toast.error('Session expired. Please log in again.');
-        Cookies.remove('token');
-        Cookies.remove('user');
-        router.push('/login');
+        handleUnauthorized();
         return;
       }
 
@@ -301,7 +300,7 @@ export default function DevicesPage() {
   };
 
   const handleLogoutInstance = async (instanceId: string) => {
-    const token = Cookies.get('token');
+    const token = await getToken();
     if (!token) {
       toast.error('Please log in to log out instance');
       router.push('/login');
@@ -320,10 +319,7 @@ export default function DevicesPage() {
       });
 
       if (response.status === 401) {
-        toast.error('Session expired. Please log in again.');
-        Cookies.remove('token');
-        Cookies.remove('user');
-        router.push('/login');
+        handleUnauthorized();
         return;
       }
 
@@ -356,7 +352,7 @@ export default function DevicesPage() {
   };
 
   const handleEditInstance = async () => {
-    const token = Cookies.get('token');
+    const token = await getToken();
     if (!token) {
       toast.error('Please log in to edit instance');
       router.push('/login');
@@ -383,10 +379,7 @@ export default function DevicesPage() {
       });
 
       if (response.status === 401) {
-        toast.error('Session expired. Please log in again.');
-        Cookies.remove('token');
-        Cookies.remove('user');
-        router.push('/login');
+        handleUnauthorized();
         return;
       }
 

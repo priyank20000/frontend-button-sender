@@ -11,6 +11,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+idencia:1
 import Cookies from 'js-cookie';
 import { useRouter } from 'next/navigation';
 import { Toaster, toast } from 'react-hot-toast';
@@ -64,7 +65,12 @@ export default function DevicesPage() {
   // Fetch instances on component mount
   useEffect(() => {
     const fetchInstances = async () => {
-      const token = Cookies.get('token'); // Keep this for API calls
+      const token = Cookies.get('token');
+      if (!token) {
+        router.push('/');
+        return;
+      }
+
       setIsLoading(true);
       try {
         const response = await fetch('https://whatsapp.recuperafly.com/api/instance/all', {
@@ -82,14 +88,14 @@ export default function DevicesPage() {
           toast.error(data.message || 'Failed to fetch instances');
         }
       } catch (err) {
-        toast.error('Error fetching instances');
+        toast.error('Error fetching instances: ');
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchInstances();
-  }, []);
+  }, [router]);
 
   // Poll instance status when QR is shown
   useEffect(() => {
@@ -97,6 +103,11 @@ export default function DevicesPage() {
     if (showQR && selectedInstanceId) {
       interval = setInterval(async () => {
         const token = Cookies.get('token');
+        if (!token) {
+          router.push('/');
+          return;
+        }
+
         try {
           const response = await fetch('https://whatsapp.recuperafly.com/api/instance/all', {
             method: 'POST',
@@ -126,11 +137,16 @@ export default function DevicesPage() {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [showQR, selectedInstanceId]);
+  }, [showQR, selectedInstanceId, router]);
 
   // Handle Create Instance
   const handleCreateInstance = async () => {
     const token = Cookies.get('token');
+    if (!token) {
+      router.push('/');
+      return;
+    }
+
     setIsCreating(true);
     try {
       const response = await fetch('https://whatsapp.recuperafly.com/api/instance/create', {
@@ -159,6 +175,11 @@ export default function DevicesPage() {
   // Handle Show QR
   const handleShowQR = async (instanceId: string) => {
     const token = Cookies.get('token');
+    if (!token) {
+      router.push('/');
+      return;
+    }
+
     setIsProcessingQR(prev => ({ ...prev, [instanceId]: true }));
     try {
       const response = await fetch('https://whatsapp.recuperafly.com/api/instance/qr', {
@@ -188,6 +209,11 @@ export default function DevicesPage() {
   // Handle Delete Instance
   const handleDeleteInstance = async (instanceId: string) => {
     const token = Cookies.get('token');
+    if (!token) {
+      router.push('/');
+      return;
+    }
+
     setIsProcessingDelete(prev => ({ ...prev, [instanceId]: true }));
     try {
       const response = await fetch('https://whatsapp.recuperafly.com/api/instance/delete', {
@@ -220,6 +246,11 @@ export default function DevicesPage() {
   // Handle Logout Instance
   const handleLogoutInstance = async (instanceId: string) => {
     const token = Cookies.get('token');
+    if (!token) {
+      router.push('/');
+      return;
+    }
+
     setIsProcessingLogout(prev => ({ ...prev, [instanceId]: true }));
     try {
       const response = await fetch('https://whatsapp.recuperafly.com/api/instance/logout', {
@@ -263,6 +294,11 @@ export default function DevicesPage() {
   // Handle Edit Instance
   const handleEditInstance = async () => {
     const token = Cookies.get('token');
+    if (!token) {
+      router.push('/');
+      return;
+    }
+
     if (!editInstanceName.trim()) {
       toast.error('Please enter a valid name');
       return;

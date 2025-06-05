@@ -11,7 +11,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+idencia:1
 import Cookies from 'js-cookie';
 import { useRouter } from 'next/navigation';
 import { Toaster, toast } from 'react-hot-toast';
@@ -27,25 +27,38 @@ import {
   Loader2
 } from 'lucide-react';
 
+// Define interfaces for type safety
+interface WhatsAppProfile {
+  phone?: string | null;
+  status: string;
+  profile?: string | null;
+}
+
+interface Instance {
+  _id: string;
+  name?: string;
+  whatsapp: WhatsAppProfile;
+}
+
 export default function DevicesPage() {
-  const [instances, setInstances] = useState([]);
+  const [instances, setInstances] = useState<Instance[]>([]);
   const [showQR, setShowQR] = useState(false);
   const [qrCode, setQrCode] = useState('');
-  const [selectedInstanceId, setSelectedInstanceId] = useState(null);
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
-  const [connectedInstance, setConnectedInstance] = useState(null);
+  const [connectedInstance, setConnectedInstance] = useState<Instance | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [instancesPerPage, setInstancesPerPage] = useState(9);
   const [showEditDialog, setShowEditDialog] = useState(false);
-  const [editInstanceId, setEditInstanceId] = useState(null);
+  const [editInstanceId, setEditInstanceId] = useState<string | null>(null);
   const [editInstanceName, setEditInstanceName] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
-  const [isProcessingQR, setIsProcessingQR] = useState({});
-  const [isProcessingLogout, setIsProcessingLogout] = useState({});
-  const [isProcessingDelete, setIsProcessingDelete] = useState({});
-  const [isProcessingEdit, setIsProcessingEdit] = useState({});
-  const [selectedInstance, setSelectedInstance] = useState(null);
+  const [isProcessingQR, setIsProcessingQR] = useState<{ [key: string]: boolean }>({});
+  const [isProcessingLogout, setIsProcessingLogout] = useState<{ [key: string]: boolean }>({});
+  const [isProcessingDelete, setIsProcessingDelete] = useState<{ [key: string]: boolean }>({});
+  const [isProcessingEdit, setIsProcessingEdit] = useState<{ [key: string]: boolean }>({});
+  const [selectedInstance, setSelectedInstance] = useState<Instance | null>(null);
 
   const router = useRouter();
 
@@ -75,7 +88,7 @@ export default function DevicesPage() {
           toast.error(data.message || 'Failed to fetch instances');
         }
       } catch (err) {
-        toast.error('Error fetching instances: ' + err.message);
+        toast.error('Error fetching instances: ');
       } finally {
         setIsLoading(false);
       }
@@ -84,8 +97,9 @@ export default function DevicesPage() {
     fetchInstances();
   }, [router]);
 
+  // Poll instance status when QR is shown
   useEffect(() => {
-    let interval;
+    let interval: NodeJS.Timeout | undefined;
     if (showQR && selectedInstanceId) {
       interval = setInterval(async () => {
         const token = Cookies.get('token');
@@ -105,7 +119,7 @@ export default function DevicesPage() {
           });
           const data = await response.json();
           if (data.status) {
-            const updatedInstance = data.instances.find((inst) => inst._id === selectedInstanceId);
+            const updatedInstance = data.instances.find((inst: Instance) => inst._id === selectedInstanceId);
             if (updatedInstance && updatedInstance.whatsapp.status === 'connected') {
               setShowQR(false);
               setConnectedInstance(updatedInstance);
@@ -120,7 +134,9 @@ export default function DevicesPage() {
       }, 3000);
     }
 
-    return () => clearInterval(interval);
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, [showQR, selectedInstanceId, router]);
 
   // Handle Create Instance
@@ -157,7 +173,7 @@ export default function DevicesPage() {
   };
 
   // Handle Show QR
-  const handleShowQR = async (instanceId) => {
+  const handleShowQR = async (instanceId: string) => {
     const token = Cookies.get('token');
     if (!token) {
       router.push('/login');
@@ -191,7 +207,7 @@ export default function DevicesPage() {
   };
 
   // Handle Delete Instance
-  const handleDeleteInstance = async (instanceId) => {
+  const handleDeleteInstance = async (instanceId: string) => {
     const token = Cookies.get('token');
     if (!token) {
       router.push('/login');
@@ -221,14 +237,14 @@ export default function DevicesPage() {
         toast.error(data.message || 'Failed to delete instance');
       }
     } catch (err) {
-      toast.error('Error deleting instance: ' + err.message);
+      toast.error('Error deleting instance: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
       setIsProcessingDelete(prev => ({ ...prev, [instanceId]: false }));
     }
   };
 
   // Handle Logout Instance
-  const handleLogoutInstance = async (instanceId) => {
+  const handleLogoutInstance = async (instanceId: string) => {
     const token = Cookies.get('token');
     if (!token) {
       router.push('/login');
@@ -268,7 +284,8 @@ export default function DevicesPage() {
         toast.error(data.message || 'Failed to log out');
       }
     } catch (err) {
-      toast.error('Error logging out: ' + err.message);
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
+      toast.error('Error logging out: ' + errorMessage);
     } finally {
       setIsProcessingLogout(prev => ({ ...prev, [instanceId]: false }));
     }
@@ -287,7 +304,7 @@ export default function DevicesPage() {
       return;
     }
 
-    setIsProcessingEdit(prev => ({ ...prev, [editInstanceId]: true }));
+    setIsProcessingEdit(prev => ({ ...prev, [editInstanceId!]: true }));
     try {
       const response = await fetch('https://whatsapp.recuperafly.com/api/instance/edit', {
         method: 'POST',
@@ -319,23 +336,23 @@ export default function DevicesPage() {
         toast.error(data.message || 'Failed to update instance name');
       }
     } catch (err) {
-      toast.error('Error updating instance name: ' + err.message);
+      toast.error('Error updating instance name: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
-      setIsProcessingEdit(prev => ({ ...prev, [editInstanceId]: false }));
+      setIsProcessingEdit(prev => ({ ...prev, [editInstanceId!]: false }));
     }
   };
 
   // Open Edit Dialog
-  const openEditDialog = (instanceId, currentName) => {
+  const openEditDialog = (instanceId: string, currentName: string | undefined) => {
     const instance = instances.find(inst => inst._id === instanceId);
     setEditInstanceId(instanceId);
     setEditInstanceName(currentName || '');
-    setSelectedInstance(instance);
+    setSelectedInstance(instance || null);
     setShowEditDialog(true);
   };
 
   // Handle Instances Per Page Change
-  const handleInstancesPerPageChange = (value) => {
+  const handleInstancesPerPageChange = (value: string) => {
     const newPerPage = parseInt(value, 10);
     setInstancesPerPage(newPerPage);
     setCurrentPage(1);
@@ -360,7 +377,7 @@ export default function DevicesPage() {
   };
 
   // Get status class
-  const getStatusClass = (status) => {
+  const getStatusClass = (status: string) => {
     switch (status) {
       case 'connected':
         return 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20';
@@ -567,7 +584,6 @@ export default function DevicesPage() {
             <span className="text-zinc-400 text-sm">
               Showing {indexOfFirstInstance + 1}-{Math.min(indexOfLastInstance, instances.length)} of {instances.length} instances
             </span>
-            
           </div>
           
           <div className="flex items-center">
@@ -719,7 +735,6 @@ export default function DevicesPage() {
                   className="mt-6 bg-zinc-800 hover:bg-zinc-700 text-white font-medium px-6 py-2 h-12 rounded-xl transition-all duration-300"
                   onClick={() => setShowSuccessDialog(false)}
                 >
-                
                   Continue
                 </Button>
               </div>
@@ -802,9 +817,9 @@ export default function DevicesPage() {
                 <Button
                   className="bg-zinc-800 hover:bg-zinc-700 text-white"
                   onClick={handleEditInstance}
-                  disabled={!editInstanceName.trim() || isProcessingEdit[editInstanceId]}
+                  disabled={!editInstanceName.trim() || isProcessingEdit[editInstanceId!]}
                 >
-                  {isProcessingEdit[editInstanceId] ? (
+                  {isProcessingEdit[editInstanceId!] ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : 'Save Changes'}
                 </Button>

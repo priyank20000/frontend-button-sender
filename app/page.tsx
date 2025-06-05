@@ -19,6 +19,7 @@ export default function Login() {
   useEffect(() => {
     const token = Cookies.get('token');
     if (token) {
+      console.log('Token found on login page:', token.substring(0, 10) + '...');
       router.push('/dashboard');
     }
   }, [router]);
@@ -38,15 +39,17 @@ export default function Login() {
       });
 
       const data = await response.json();
+      console.log('Login API response:', data);
 
       if (data.success) {
-        // Set cookie with explicit domain and path
-        Cookies.set('token', data.token, {
-          expires: 1,
+        const token = data.token;
+        console.log('Setting token:', token.substring(0, 10) + '...');
+        Cookies.set('token', token, {
+          expires: 1, // 1 day
           secure: process.env.NODE_ENV === 'production', // Secure only in production
-          sameSite: 'Lax', // Relax to Lax for redirects
-          path: '/', // Ensure cookie is accessible everywhere
-          domain: process.env.NODE_ENV === 'production' ? 'whatsapp.recuperafly.com' : undefined, // Set domain in production
+          sameSite: 'Lax', // Allow cookie during redirects
+          path: '/', // Accessible across all routes
+          domain: process.env.NODE_ENV === 'production' ? 'whatsapp.recuperafly.com' : undefined, // Domain for production
         });
         Cookies.set('user', JSON.stringify(data.user), {
           expires: 1,
@@ -55,7 +58,12 @@ export default function Login() {
           path: '/',
           domain: process.env.NODE_ENV === 'production' ? 'whatsapp.recuperafly.com' : undefined,
         });
-        // Add slight delay to ensure cookie is set before redirect
+
+        // Verify cookie is set
+        const storedToken = Cookies.get('token');
+        console.log('Stored token after set:', storedToken ? storedToken.substring(0, 10) + '...' : 'Not found');
+
+        // Delay redirect to ensure cookie is set
         setTimeout(() => {
           router.push('/dashboard');
         }, 100);
@@ -63,6 +71,7 @@ export default function Login() {
         setError(data.message || 'Failed to login. Please check your credentials.');
       }
     } catch (err) {
+      console.error('Login error:', err);
       setError('Failed to login. Please try again.');
     } finally {
       setIsLoading(false);

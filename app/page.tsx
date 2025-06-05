@@ -44,26 +44,36 @@ export default function Login() {
       if (data.success) {
         const token = data.token;
         console.log('Setting token:', token.substring(0, 10) + '...');
+
+        // Try setting cookie with minimal restrictions
         Cookies.set('token', token, {
           expires: 1, // 1 day
-          secure: process.env.NODE_ENV === 'production', // Secure only in production
-          sameSite: 'Lax', // Allow cookie during redirects
-          path: '/', // Accessible across all routes
-          domain: process.env.NODE_ENV === 'production' ? 'whatsapp.recuperafly.com' : undefined, // Domain for production
+          path: '/', // Accessible everywhere
+          secure: window.location.protocol === 'https:', // Secure only if HTTPS
+          sameSite: 'Lax', // Allow redirects
         });
         Cookies.set('user', JSON.stringify(data.user), {
           expires: 1,
-          secure: process.env.NODE_ENV === 'production',
-          sameSite: 'Lax',
           path: '/',
-          domain: process.env.NODE_ENV === 'production' ? 'whatsapp.recuperafly.com' : undefined,
+          secure: window.location.protocol === 'https:',
+          sameSite: 'Lax',
         });
 
-        // Verify cookie is set
+        // Debug cookie immediately after setting
         const storedToken = Cookies.get('token');
         console.log('Stored token after set:', storedToken ? storedToken.substring(0, 10) + '...' : 'Not found');
 
-        // Delay redirect to ensure cookie is set
+        // Debug raw document.cookie
+        console.log('Raw document.cookie:', document.cookie);
+
+        // Fallback to localStorage if cookie fails
+        if (!storedToken) {
+          console.warn('Cookie not set, falling back to localStorage');
+          localStorage.setItem('token', token);
+          localStorage.setItem('user', JSON.stringify(data.user));
+        }
+
+        // Delay redirect to ensure storage is complete
         setTimeout(() => {
           router.push('/dashboard');
         }, 100);

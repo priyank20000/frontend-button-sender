@@ -25,15 +25,20 @@ export default function DevicesPage() {
   const router = useRouter();
 
   const fetchInstances = useCallback(async () => {
+    // Check cookie first, then localStorage
     let token = Cookies.get('token');
     if (!token) {
-      // Retry after a short delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      token = Cookies.get('token');
+      token = localStorage.getItem('token');
     }
 
     if (!token) {
-      console.warn('No token found in fetchInstances, redirecting to login');
+      // Retry after a short delay
+      await new Promise(resolve => setTimeout(resolve, 500));
+      token = Cookies.get('token') || localStorage.getItem('token');
+    }
+
+    if (!token) {
+      console.warn('No token found in cookie or localStorage, redirecting to login');
       toast.error('Please log in to access your devices');
       router.push('/login');
       return;
@@ -54,8 +59,10 @@ export default function DevicesPage() {
       if (response.status === 401) {
         console.warn('Unauthorized response from /api/instance/all');
         toast.error('Session expired. Please log in again.');
-        Cookies.remove('token', { path: '/', domain: process.env.NODE_ENV === 'production' ? 'whatsapp.recuperafly.com' : undefined });
-        Cookies.remove('user', { path: '/', domain: process.env.NODE_ENV === 'production' ? 'whatsapp.recuperafly.com' : undefined });
+        Cookies.remove('token', { path: '/', secure: window.location.protocol === 'https:', sameSite: 'Lax' });
+        localStorage.removeItem('token');
+        Cookies.remove('user', { path: '/', secure: window.location.protocol === 'https:', sameSite: 'Lax' });
+        localStorage.removeItem('user');
         router.push('/login');
         return;
       }

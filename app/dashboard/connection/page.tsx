@@ -64,9 +64,17 @@ export default function DevicesPage() {
   // Fetch instances on component mount
   useEffect(() => {
     const fetchInstances = async () => {
-      const token = Cookies.get('token'); // Keep this for API calls
+      const token = Cookies.get('token');
+      if (!token) {
+        console.warn('No token found, redirecting to login');
+        toast.error('Please log in to access your devices');
+        router.push('/');
+        return;
+      }
+
       setIsLoading(true);
       try {
+        console.debug('Fetching instances with token:', token.substring(0, 10) + '...'); // Log partial token for debugging
         const response = await fetch('https://whatsapp.recuperafly.com/api/instance/all', {
           method: 'POST',
           headers: {
@@ -75,21 +83,32 @@ export default function DevicesPage() {
           },
           body: JSON.stringify({}),
         });
+
+        if (response.status === 401) {
+          console.warn('Unauthorized response received');
+          toast.error('Session expired. Please log in again.');
+          Cookies.remove('token'); // Clear invalid token
+          router.push('/');
+          return;
+        }
+
         const data = await response.json();
         if (data.status) {
           setInstances(data.instances || []);
         } else {
+          console.error('API error:', data.message);
           toast.error(data.message || 'Failed to fetch instances');
         }
       } catch (err) {
-        toast.error('Error fetching instances');
+        console.error('Error fetching instances:', err);
+        toast.error('Error fetching instances: ' + (err instanceof Error ? err.message : 'Unknown error'));
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchInstances();
-  }, []);
+  }, [router]);
 
   // Poll instance status when QR is shown
   useEffect(() => {
@@ -97,6 +116,15 @@ export default function DevicesPage() {
     if (showQR && selectedInstanceId) {
       interval = setInterval(async () => {
         const token = Cookies.get('token');
+        if (!token) {
+          console.warn('No token found during QR polling, redirecting to login');
+          toast.error('Please log in to continue');
+          router.push('/');
+          setShowQR(false);
+          clearInterval(interval);
+          return;
+        }
+
         try {
           const response = await fetch('https://whatsapp.recuperafly.com/api/instance/all', {
             method: 'POST',
@@ -106,6 +134,17 @@ export default function DevicesPage() {
             },
             body: JSON.stringify({}),
           });
+
+          if (response.status === 401) {
+            console.warn('Unauthorized response during QR polling');
+            toast.error('Session expired. Please log in again.');
+            Cookies.remove('token');
+            router.push('/');
+            setShowQR(false);
+            clearInterval(interval);
+            return;
+          }
+
           const data = await response.json();
           if (data.status) {
             const updatedInstance = data.instances.find((inst: Instance) => inst._id === selectedInstanceId);
@@ -126,11 +165,17 @@ export default function DevicesPage() {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [showQR, selectedInstanceId]);
+  }, [showQR, selectedInstanceId, router]);
 
   // Handle Create Instance
   const handleCreateInstance = async () => {
     const token = Cookies.get('token');
+    if (!token) {
+      toast.error('Please log in to create an instance');
+      router.push('/');
+      return;
+    }
+
     setIsCreating(true);
     try {
       const response = await fetch('https://whatsapp.recuperafly.com/api/instance/create', {
@@ -140,8 +185,15 @@ export default function DevicesPage() {
           'Content-Type': 'application/json',
         },
       });
-      const data = await response.json();
 
+      if (response.status === 401) {
+        toast.error('Session expired. Please log in again.');
+        Cookies.remove('token');
+        router.push('/');
+        return;
+      }
+
+      const data = await response.json();
       if (data.status) {
         const newInstance = data.instance;
         setInstances((prev) => [...prev, newInstance]);
@@ -150,7 +202,7 @@ export default function DevicesPage() {
         toast.error(data.message || 'Failed to create instance');
       }
     } catch (err) {
-      toast.error('Error creating instance');
+      toast.error('Error creating instance: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
       setIsCreating(false);
     }
@@ -159,6 +211,12 @@ export default function DevicesPage() {
   // Handle Show QR
   const handleShowQR = async (instanceId: string) => {
     const token = Cookies.get('token');
+    if (!token) {
+      toast.error('Please log in to view QR code');
+      router.push('/');
+      return;
+    }
+
     setIsProcessingQR(prev => ({ ...prev, [instanceId]: true }));
     try {
       const response = await fetch('https://whatsapp.recuperafly.com/api/instance/qr', {
@@ -169,8 +227,15 @@ export default function DevicesPage() {
         },
         body: JSON.stringify({ instance_id: instanceId }),
       });
-      const data = await response.json();
 
+      if (response.status === 401) {
+        toast.error('Session expired. Please log in again.');
+        Cookies.remove('token');
+        router.push('/');
+        return;
+      }
+
+      const data = await response.json();
       if (data.status) {
         setQrCode(data.qr);
         setSelectedInstanceId(instanceId);
@@ -179,7 +244,7 @@ export default function DevicesPage() {
         toast.error(data.message || 'Failed to fetch QR code');
       }
     } catch (err) {
-      toast.error('Error fetching QR code');
+      toast.error('Error fetching QR code: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
       setIsProcessingQR(prev => ({ ...prev, [instanceId]: false }));
     }
@@ -188,6 +253,12 @@ export default function DevicesPage() {
   // Handle Delete Instance
   const handleDeleteInstance = async (instanceId: string) => {
     const token = Cookies.get('token');
+    if (!token) {
+      toast.error('Please log in to delete instance');
+      router.push('/');
+      return;
+    }
+
     setIsProcessingDelete(prev => ({ ...prev, [instanceId]: true }));
     try {
       const response = await fetch('https://whatsapp.recuperafly.com/api/instance/delete', {
@@ -198,8 +269,15 @@ export default function DevicesPage() {
         },
         body: JSON.stringify({ instanceId }),
       });
-      const data = await response.json();
 
+      if (response.status === 401) {
+        toast.error('Session expired. Please log in again.');
+        Cookies.remove('token');
+        router.push('/');
+        return;
+      }
+
+      const data = await response.json();
       if (data.status) {
         setInstances((prev) => prev.filter((instance) => instance._id !== instanceId));
         toast.success(data.message || 'Instance deleted successfully');
@@ -220,6 +298,12 @@ export default function DevicesPage() {
   // Handle Logout Instance
   const handleLogoutInstance = async (instanceId: string) => {
     const token = Cookies.get('token');
+    if (!token) {
+      toast.error('Please log in to log out instance');
+      router.push('/');
+      return;
+    }
+
     setIsProcessingLogout(prev => ({ ...prev, [instanceId]: true }));
     try {
       const response = await fetch('https://whatsapp.recuperafly.com/api/instance/logout', {
@@ -230,8 +314,15 @@ export default function DevicesPage() {
         },
         body: JSON.stringify({ instanceId }),
       });
-      const data = await response.json();
 
+      if (response.status === 401) {
+        toast.error('Session expired. Please log in again.');
+        Cookies.remove('token');
+        router.push('/');
+        return;
+      }
+
+      const data = await response.json();
       if (data.status) {
         setInstances((prev) =>
           prev.map((instance) =>
@@ -263,6 +354,12 @@ export default function DevicesPage() {
   // Handle Edit Instance
   const handleEditInstance = async () => {
     const token = Cookies.get('token');
+    if (!token) {
+      toast.error('Please log in to edit instance');
+      router.push('/');
+      return;
+    }
+
     if (!editInstanceName.trim()) {
       toast.error('Please enter a valid name');
       return;
@@ -281,8 +378,15 @@ export default function DevicesPage() {
           name: editInstanceName,
         }),
       });
-      const data = await response.json();
 
+      if (response.status === 401) {
+        toast.error('Session expired. Please log in again.');
+        Cookies.remove('token');
+        router.push('/');
+        return;
+      }
+
+      const data = await response.json();
       if (data.status) {
         setInstances((prev) =>
           prev.map((instance) =>

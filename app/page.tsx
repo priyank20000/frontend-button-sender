@@ -1,8 +1,9 @@
+// app/login/page.tsx
 "use client";
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Cookies from 'js-cookie'; // Import js-cookie
+import Cookies from 'js-cookie';
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,7 +19,7 @@ export default function Login() {
   useEffect(() => {
     const token = Cookies.get('token');
     if (token) {
-      router.push('/dashboard'); 
+      router.push('/dashboard');
     }
   }, [router]);
 
@@ -39,17 +40,25 @@ export default function Login() {
       const data = await response.json();
 
       if (data.success) {
+        // Set cookie with explicit domain and path
         Cookies.set('token', data.token, {
-          expires: 1, 
-          secure: true, 
-          sameSite: 'Strict', 
+          expires: 1,
+          secure: process.env.NODE_ENV === 'production', // Secure only in production
+          sameSite: 'Lax', // Relax to Lax for redirects
+          path: '/', // Ensure cookie is accessible everywhere
+          domain: process.env.NODE_ENV === 'production' ? 'whatsapp.recuperafly.com' : undefined, // Set domain in production
         });
         Cookies.set('user', JSON.stringify(data.user), {
           expires: 1,
-          secure: true,
-          sameSite: 'Strict',
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: 'Lax',
+          path: '/',
+          domain: process.env.NODE_ENV === 'production' ? 'whatsapp.recuperafly.com' : undefined,
         });
-        router.push('/dashboard');
+        // Add slight delay to ensure cookie is set before redirect
+        setTimeout(() => {
+          router.push('/dashboard');
+        }, 100);
       } else {
         setError(data.message || 'Failed to login. Please check your credentials.');
       }

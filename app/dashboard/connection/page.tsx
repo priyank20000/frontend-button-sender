@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,7 +26,6 @@ import {
   Loader2
 } from 'lucide-react';
 
-// Define interfaces for type safety
 interface WhatsAppProfile {
   phone?: string | null;
   status: string;
@@ -47,7 +46,7 @@ export default function DevicesPage() {
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [connectedInstance, setConnectedInstance] = useState<Instance | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [instancesPerPage, setInstancesPerPage] = useState(9);
+  const [instancesPerPage] = useState(9);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editInstanceId, setEditInstanceId] = useState<string | null>(null);
   const [editInstanceName, setEditInstanceName] = useState('');
@@ -61,56 +60,61 @@ export default function DevicesPage() {
 
   const router = useRouter();
 
-  // Fetch instances on component mount
-  useEffect(() => {
-    const fetchInstances = async () => {
-      const token = Cookies.get('token');
-      if (!token) {
-        console.warn('No token found, redirecting to login');
-        toast.error('Please log in to access your devices');
-        router.push('/');
+  const fetchInstances = useCallback(async () => {
+    let token = Cookies.get('token');
+    if (!token) {
+      // Retry after a short delay
+      await new Promise(resolve => setTimeout(resolve, 500));
+      token = Cookies.get('token');
+    }
+
+    if (!token) {
+      console.warn('No token found, redirecting to login');
+      toast.error('Please log in to access your devices');
+      router.push('/login');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      console.debug('Fetching instances with token:', token.substring(0, 10) + '...');
+      const response = await fetch('https://whatsapp.recuperafly.com/api/instance/all', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({}),
+      });
+
+      if (response.status === 401) {
+        console.warn('Unauthorized response received');
+        toast.error('Session expired. Please log in again.');
+        Cookies.remove('token');
+        Cookies.remove('user');
+        router.push('/login');
         return;
       }
 
-      setIsLoading(true);
-      try {
-        console.debug('Fetching instances with token:', token.substring(0, 10) + '...'); // Log partial token for debugging
-        const response = await fetch('https://whatsapp.recuperafly.com/api/instance/all', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({}),
-        });
-
-        if (response.status === 401) {
-          console.warn('Unauthorized response received');
-          toast.error('Session expired. Please log in again.');
-          Cookies.remove('token'); // Clear invalid token
-          router.push('/');
-          return;
-        }
-
-        const data = await response.json();
-        if (data.status) {
-          setInstances(data.instances || []);
-        } else {
-          console.error('API error:', data.message);
-          toast.error(data.message || 'Failed to fetch instances');
-        }
-      } catch (err) {
-        console.error('Error fetching instances:', err);
-        toast.error('Error fetching instances: ' + (err instanceof Error ? err.message : 'Unknown error'));
-      } finally {
-        setIsLoading(false);
+      const data = await response.json();
+      if (data.status) {
+        setInstances(data.instances || []);
+      } else {
+        console.error('API error:', data.message);
+        toast.error(data.message || 'Failed to fetch instances');
       }
-    };
-
-    fetchInstances();
+    } catch (err) {
+      console.error('Error fetching instances:', err);
+      toast.error('Error fetching instances: ' + (err instanceof Error ? err.message : 'Unknown error'));
+    } finally {
+      setIsLoading(false);
+    }
   }, [router]);
 
-  // Poll instance status when QR is shown
+  useEffect(() => {
+    fetchInstances();
+  }, [fetchInstances]);
+
   useEffect(() => {
     let interval: NodeJS.Timeout | undefined;
     if (showQR && selectedInstanceId) {
@@ -119,7 +123,7 @@ export default function DevicesPage() {
         if (!token) {
           console.warn('No token found during QR polling, redirecting to login');
           toast.error('Please log in to continue');
-          router.push('/');
+          router.push('/login');
           setShowQR(false);
           clearInterval(interval);
           return;
@@ -139,7 +143,8 @@ export default function DevicesPage() {
             console.warn('Unauthorized response during QR polling');
             toast.error('Session expired. Please log in again.');
             Cookies.remove('token');
-            router.push('/');
+            Cookies.remove('user');
+            router.push('/login');
             setShowQR(false);
             clearInterval(interval);
             return;
@@ -167,12 +172,11 @@ export default function DevicesPage() {
     };
   }, [showQR, selectedInstanceId, router]);
 
-  // Handle Create Instance
   const handleCreateInstance = async () => {
     const token = Cookies.get('token');
     if (!token) {
       toast.error('Please log in to create an instance');
-      router.push('/');
+      router.push('/login');
       return;
     }
 
@@ -189,7 +193,8 @@ export default function DevicesPage() {
       if (response.status === 401) {
         toast.error('Session expired. Please log in again.');
         Cookies.remove('token');
-        router.push('/');
+        Cookies.remove('user');
+        router.push('/login');
         return;
       }
 
@@ -208,12 +213,11 @@ export default function DevicesPage() {
     }
   };
 
-  // Handle Show QR
   const handleShowQR = async (instanceId: string) => {
     const token = Cookies.get('token');
     if (!token) {
       toast.error('Please log in to view QR code');
-      router.push('/');
+      router.push('/login');
       return;
     }
 
@@ -231,7 +235,8 @@ export default function DevicesPage() {
       if (response.status === 401) {
         toast.error('Session expired. Please log in again.');
         Cookies.remove('token');
-        router.push('/');
+        Cookies.remove('user');
+        router.push('/login');
         return;
       }
 
@@ -250,12 +255,11 @@ export default function DevicesPage() {
     }
   };
 
-  // Handle Delete Instance
   const handleDeleteInstance = async (instanceId: string) => {
     const token = Cookies.get('token');
     if (!token) {
       toast.error('Please log in to delete instance');
-      router.push('/');
+      router.push('/login');
       return;
     }
 
@@ -273,7 +277,8 @@ export default function DevicesPage() {
       if (response.status === 401) {
         toast.error('Session expired. Please log in again.');
         Cookies.remove('token');
-        router.push('/');
+        Cookies.remove('user');
+        router.push('/login');
         return;
       }
 
@@ -295,12 +300,11 @@ export default function DevicesPage() {
     }
   };
 
-  // Handle Logout Instance
   const handleLogoutInstance = async (instanceId: string) => {
     const token = Cookies.get('token');
     if (!token) {
       toast.error('Please log in to log out instance');
-      router.push('/');
+      router.push('/login');
       return;
     }
 
@@ -318,7 +322,8 @@ export default function DevicesPage() {
       if (response.status === 401) {
         toast.error('Session expired. Please log in again.');
         Cookies.remove('token');
-        router.push('/');
+        Cookies.remove('user');
+        router.push('/login');
         return;
       }
 
@@ -344,19 +349,17 @@ export default function DevicesPage() {
         toast.error(data.message || 'Failed to log out');
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error occurred';
-      toast.error('Error logging out: ' + errorMessage);
+      toast.error('Error logging out: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
       setIsProcessingLogout(prev => ({ ...prev, [instanceId]: false }));
     }
   };
 
-  // Handle Edit Instance
   const handleEditInstance = async () => {
     const token = Cookies.get('token');
     if (!token) {
       toast.error('Please log in to edit instance');
-      router.push('/');
+      router.push('/login');
       return;
     }
 
@@ -382,7 +385,8 @@ export default function DevicesPage() {
       if (response.status === 401) {
         toast.error('Session expired. Please log in again.');
         Cookies.remove('token');
-        router.push('/');
+        Cookies.remove('user');
+        router.push('/login');
         return;
       }
 
@@ -410,7 +414,6 @@ export default function DevicesPage() {
     }
   };
 
-  // Open Edit Dialog
   const openEditDialog = (instanceId: string, currentName: string | undefined) => {
     const instance = instances.find(inst => inst._id === instanceId);
     setEditInstanceId(instanceId);
@@ -419,20 +422,8 @@ export default function DevicesPage() {
     setShowEditDialog(true);
   };
 
-  // Handle Instances Per Page Change
-  const handleInstancesPerPageChange = (value: string) => {
-    const newPerPage = parseInt(value, 10);
-    setInstancesPerPage(newPerPage);
-    setCurrentPage(1);
-  };
-
-  // Pagination logic
-  const indexOfLastInstance = currentPage * instancesPerPage;
-  const indexOfFirstInstance = indexOfLastInstance - instancesPerPage;
-  const currentInstances = instances.slice(indexOfFirstInstance, indexOfLastInstance);
-  const totalPages = Math.ceil(instances.length / instancesPerPage);
-
   const handleNextPage = () => {
+    const totalPages = Math.ceil(instances.length / instancesPerPage);
     if (currentPage < totalPages) {
       setCurrentPage(currentPage + 1);
     }
@@ -444,7 +435,6 @@ export default function DevicesPage() {
     }
   };
 
-  // Get status class
   const getStatusClass = (status: string) => {
     switch (status) {
       case 'connected':
@@ -455,6 +445,11 @@ export default function DevicesPage() {
         return 'bg-zinc-500/10 text-zinc-500 border border-zinc-500/20';
     }
   };
+
+  const indexOfLastInstance = currentPage * instancesPerPage;
+  const indexOfFirstInstance = indexOfLastInstance - instancesPerPage;
+  const currentInstances = instances.slice(indexOfFirstInstance, indexOfLastInstance);
+  const totalPages = Math.ceil(instances.length / instancesPerPage);
 
   return (
     <div className="space-y-8 p-6 max-w-7xl mx-auto bg-zinc-950">
@@ -645,7 +640,6 @@ export default function DevicesPage() {
         </div>
       )}
 
-      {/* Pagination Controls */}
       {instances.length > instancesPerPage && (
         <div className="flex justify-between items-center mt-8 bg-zinc-900 border border-zinc-800 rounded-xl p-4">
           <div className="flex items-center gap-3">
@@ -705,7 +699,6 @@ export default function DevicesPage() {
         </div>
       )}
 
-      {/* QR Code Dialog */}
       <Dialog open={showQR} onOpenChange={setShowQR}>
         <DialogContent className="bg-zinc-900 border-zinc-800 text-zinc-200 rounded-xl sm:max-w-[800px]">
           <DialogHeader>
@@ -761,7 +754,6 @@ export default function DevicesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Success Connection Dialog */}
       <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
         <DialogContent className="bg-zinc-900 border-zinc-800 text-zinc-200 rounded-xl sm:max-w-md">
           <DialogHeader>
@@ -811,7 +803,6 @@ export default function DevicesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Instance Dialog */}
       <Dialog open={showEditDialog} onOpenChange={(open) => {
         setShowEditDialog(open);
         if (!open) {

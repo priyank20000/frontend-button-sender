@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { X, Plus, FileText, Bold, Italic, Strikethrough, List, Quote, Code, Eye, Edit, Trash, Link } from 'lucide-react';
+import { Label } from "@/components/ui/label";
+import { X, Plus, FileText, Bold, Italic, Strikethrough, List, Quote, Code, Eye, Edit, Trash, Link, ChevronLeft, ChevronRight, Minus } from 'lucide-react';
 import Cookies from 'js-cookie';
 import { useRouter } from 'next/navigation';
 import { Toaster, toast } from 'react-hot-toast';
@@ -31,6 +32,13 @@ interface Button {
   title?: string;
 }
 
+interface ToastMessage {
+  id: string;
+  message: string;
+  type: 'success' | 'error' | 'info' | 'warning';
+  timestamp: number;
+}
+
 export default function Templates() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [templateName, setTemplateName] = useState('');
@@ -52,6 +60,59 @@ export default function Templates() {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewContent, setPreviewContent] = useState('');
   const [previewButtons, setPreviewButtons] = useState<Button[]>([]);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  // Enhanced toast system matching connection page
+  const showToast = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'success') => {
+    const id = Date.now().toString();
+    const newToast: ToastMessage = {
+      id,
+      message,
+      type,
+      timestamp: Date.now()
+    };
+    
+    setToasts(prev => [...prev, newToast]);
+    
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+      removeToast(id);
+    }, 5000);
+  };
+
+  const removeToast = (id: string) => {
+    setToasts(prev => prev.filter(toast => toast.id !== id));
+  };
+
+  const getToastIcon = (type: string) => {
+    switch (type) {
+      case 'success':
+        return <Plus className="h-5 w-5" />;
+      case 'error':
+        return <X className="h-5 w-5" />;
+      case 'warning':
+        return <X className="h-5 w-5" />;
+      case 'info':
+        return <FileText className="h-5 w-5" />;
+      default:
+        return <FileText className="h-5 w-5" />;
+    }
+  };
+
+  const getToastStyles = (type: string) => {
+    switch (type) {
+      case 'success':
+        return 'bg-emerald-900/90 border-emerald-700 text-emerald-100';
+      case 'error':
+        return 'bg-red-900/90 border-red-700 text-red-100';
+      case 'warning':
+        return 'bg-amber-900/90 border-amber-700 text-amber-100';
+      case 'info':
+        return 'bg-blue-900/90 border-blue-700 text-blue-100';
+      default:
+        return 'bg-zinc-900/90 border-zinc-700 text-zinc-100';
+    }
+  };
 
   const getToken = async (): Promise<string | null | undefined> => {
     let token: string | null | undefined = Cookies.get('token');
@@ -67,7 +128,7 @@ export default function Templates() {
 
   const handleUnauthorized = () => {
     console.warn('Unauthorized response received');
-    toast.error('Session expired. Please log in again.');
+    showToast('Session expired. Please log in again.', 'error');
     Cookies.remove('token', { path: '/', secure: window.location.protocol === 'https:', sameSite: 'Lax' });
     localStorage.removeItem('token');
     Cookies.remove('user', { path: '/', secure: window.location.protocol === 'https:', sameSite: 'Lax' });
@@ -80,7 +141,7 @@ export default function Templates() {
     const token = await getToken();
     if (!token) {
       console.warn('No token found in cookie or localStorage, redirecting to login');
-      toast.error('Please log in to access your templates');
+      showToast('Please log in to access your templates', 'error');
       router.push('/login');
       return;
     }
@@ -109,10 +170,10 @@ export default function Templates() {
         setTemplates(validTemplates);
         setTotalTemplates(data.total || 0);
       } else {
-        toast.error(data.message || 'Failed to fetch templates');
+        showToast(data.message || 'Failed to fetch templates', 'error');
       }
     } catch (err) {
-      toast.error('Error fetching templates: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      showToast('Error fetching templates: ' + (err instanceof Error ? err.message : 'Unknown error'), 'error');
     } finally {
       setIsLoading(false);
     }
@@ -141,7 +202,7 @@ export default function Templates() {
     }
   };
 
-  const handlePreviousPage = () => {
+  const handlePrevPage = () => {
     if (currentPage > 1) {
       setCurrentPage(currentPage - 1);
     }
@@ -193,7 +254,7 @@ export default function Templates() {
     const token = await getToken();
     if (!token) {
       console.warn('No token found in cookie or localStorage, redirecting to login');
-      toast.error('Please log in to save template');
+      showToast('Please log in to save template', 'error');
       router.push('/login');
       return;
     }
@@ -238,22 +299,22 @@ export default function Templates() {
       if (data.status && data.data) {
         if (editingTemplate && editingTemplate._id) {
           setTemplates(templates.map(t => (t._id === editingTemplate._id ? data.data : t)));
-          toast.success('Template updated successfully');
+          showToast('Template updated successfully', 'success');
         } else {
           if (data.data._id) {
             setCurrentPage(1);
             await fetchTemplates();
-            toast.success('Template created successfully');
+            showToast('Template created successfully', 'success');
           } else {
-            toast.error('Created template missing _id');
+            showToast('Created template missing _id', 'error');
           }
         }
         handleCloseModal();
       } else {
-        toast.error(data.message || 'Failed to save template');
+        showToast(data.message || 'Failed to save template', 'error');
       }
     } catch (err) {
-      toast.error('Error saving template: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      showToast('Error saving template: ' + (err instanceof Error ? err.message : 'Unknown error'), 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -348,7 +409,7 @@ export default function Templates() {
     const token = await getToken();
     if (!token) {
       console.warn('No token found in cookie or localStorage, redirecting to login');
-      toast.error('Please log in to delete template');
+      showToast('Please log in to delete template', 'error');
       router.push('/login');
       return;
     }
@@ -384,12 +445,12 @@ export default function Templates() {
           setCurrentPage(1);
         }
 
-        toast.success(data.message || 'Template deleted successfully');
+        showToast(data.message || 'Template deleted successfully', 'success');
       } else {
-        toast.error(data.message || 'Failed to delete template');
+        showToast(data.message || 'Failed to delete template', 'error');
       }
     } catch (err) {
-      toast.error('Error deleting template: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      showToast('Error deleting template: ' + (err instanceof Error ? err.message : 'Unknown error'), 'error');
     } finally {
       setIsDeleting(prev => ({ ...prev, [id]: false }));
     }
@@ -420,7 +481,15 @@ export default function Templates() {
   };
 
   const addButton = () => {
-    setButtons([...buttons, { name: '', type: 'REPLY' }]);
+    if (buttons.length < 3) {
+      setButtons([...buttons, { name: '', type: 'REPLY' }]);
+    }
+  };
+
+  const removeButton = (index: number) => {
+    if (buttons.length > 1 && index > 0) {
+      setButtons(buttons.filter((_, i) => i !== index));
+    }
   };
 
   const handleVariableSelect = (value: string) => {
@@ -442,407 +511,483 @@ export default function Templates() {
   };
 
   return (
-    <div className="space-y-8 p-8">
-      <Toaster position="top-right" toastOptions={{ 
-        duration: 3000,
-        style: {
-          background: '#333',
-          color: '#fff',
-          borderRadius: '8px',
-          padding: '16px',
-        },
-      }} />
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-zinc-200">Templates</h1>
-          <p className="text-zinc-400 mt-2 text-lg">Manage your message templates</p>
-        </div>
-        <Button
-          onClick={() => handleOpenModal()}
-          className="bg-zinc-800 text-zinc-200 hover:bg-zinc-700 px-6 py-3 text-base"
-          disabled={isLoading}
-        >
-          <Plus className="h-5 w-5 mr-2" />
-          Add Template
-        </Button>
+    <div className="min-h-screen bg-zinc-950 p-4 sm:p-6">
+      {/* Toast Container */}
+      <div className="fixed top-4 right-4 z-50 space-y-2 max-w-sm w-full">
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            className={`flex items-center gap-3 p-4 rounded-lg border backdrop-blur-sm shadow-lg transform transition-all duration-300 ease-in-out ${getToastStyles(toast.type)}`}
+          >
+            <div className="flex-shrink-0">
+              {getToastIcon(toast.type)}
+            </div>
+            <div className="flex-1 text-sm font-medium">
+              {toast.message}
+            </div>
+            <button
+              onClick={() => removeToast(toast.id)}
+              className="flex-shrink-0 p-1 rounded-full hover:bg-white/10 transition-colors"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        ))}
       </div>
 
-      {isLoading ? (
-        <div className="flex items-center justify-center h-64">
-          <div className="flex flex-col items-center gap-4">
-            <Loader2 className="h-12 w-12 text-blue-500 animate-spin" />
-            <p className="text-zinc-400 text-lg">Loading templates...</p>
+      <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 sm:mb-8">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white">
+              Message Templates
+            </h1>
+            <p className="text-zinc-400 mt-2">Create and manage your message templates</p>
           </div>
+          <button
+            onClick={() => handleOpenModal()}
+            className="w-full sm:w-auto bg-zinc-800 hover:bg-zinc-700 text-white font-medium px-5 py-2 h-12 rounded-xl transition-all duration-300 flex items-center justify-center gap-2"
+            disabled={isLoading}
+          >
+            <Plus className="h-5 w-5" />
+            Add Template
+          </button>
         </div>
-      ) : templates.length > 0 ? (
-        <>
-          <Card className="bg-black border-zinc-800 p-8">
-            <Table>
-              <TableHeader>
-                <TableRow className="border-zinc-800 hover:bg-zinc-900">
-                  <TableHead className="text-zinc-400 font-semibold text-lg py-4 w-1/4 text-left">Name</TableHead>
-                  <TableHead className="text-zinc-400 font-semibold text-lg py-4 w-1/4 text-left">Message Type</TableHead>
-                  <TableHead className="text-zinc-400 font-semibold text-lg py-4 w-1/4 text-left">Message</TableHead>
-                  <TableHead className="text-zinc-400 font-semibold text-lg py-4 w-1/4 text-left">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {templates.map(template => (
-                  <TableRow key={template._id || Math.random().toString()} className="border-zinc-800 hover:bg-zinc-900">
-                    <TableCell className="text-zinc-200 py-4 w-1/4 text-left">{template.name || 'Unnamed'}</TableCell>
-                    <TableCell className="text-zinc-200 py-4 w-1/4 text-left">{template.messageType || 'N/A'}</TableCell>
-                    <TableCell className="text-zinc-200 py-4 w-1/4 text-left">
-                      <Button
-                        variant="ghost"
-                        onClick={() => handlePreview(template)}
-                        className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 text-base px-2 py-1"
-                      >
-                        <Eye className="h-5 w-5 mr-1" />
-                        Preview
-                      </Button>
-                    </TableCell>
-                    <TableCell className="text-zinc-200 py-4 w-1/4 text-left">
-                      <div className="flex gap-2">
-                        <Button
-                          variant="ghost"
-                          onClick={() => handleOpenModal(template)}
-                          className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 text-base px-2 py-1"
-                          disabled={isDeleting[template._id || ''] || !template._id}
-                        >
-                          <Edit className="h-5 w-5 mr-1" />
-                          Edit
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          onClick={() => template._id && handleDelete(template._id)}
-                          className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 text-base px-2 py-1"
-                          disabled={isDeleting[template._id || ''] || !template._id}
-                        >
-                          {isDeleting[template._id || ''] ? (
-                            <Loader2 className="h-5 w-5 animate-spin" />
-                          ) : (
-                            <Trash className="h-5 w-5 mr-1" />
-                          )}
-                          Delete
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </Card>
-          <div className="flex justify-between items-center mt-6">
-            <p className="text-zinc-400 text-lg">
-              Showing {(currentPage - 1) * templatesPerPage + 1} to{' '}
-              {Math.min(currentPage * templatesPerPage, totalTemplates)} of {totalTemplates} templates
-            </p>
-            <div className="flex gap-4">
-              <Button
-                variant="outline"
-                onClick={handlePreviousPage}
-                disabled={currentPage === 1 || isLoading}
-                className="bg-zinc-900 border-zinc-800 text-zinc-200 hover:bg-zinc-700 px-6 py-3 text-base"
-              >
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleNextPage}
-                disabled={currentPage === totalPages || isLoading}
-                className="bg-zinc-900 border-zinc-800 text-zinc-200 hover:bg-zinc-700 px-6 py-3 text-base"
-              >
-                Next
-              </Button>
+
+        {isLoading ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="flex flex-col items-center">
+              <Loader2 className="h-12 w-12 text-zinc-500 animate-spin mb-4" />
+              <p className="text-zinc-400">Loading templates...</p>
             </div>
           </div>
-        </>
-      ) : (
-        <Card className="bg-black border-zinc-800 p-8">
-          <p className="text-zinc-400 text-center text-lg">No templates available. Add a template to get started.</p>
-        </Card>
-      )}
-
-      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-        <DialogContent className="bg-black border-zinc-800 text-zinc-200 max-w-lg p-8 rounded-lg">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-semibold">Template Preview</DialogTitle>
-          </DialogHeader>
-          <DialogDescription className="text-zinc-400 text-lg leading-relaxed whitespace-pre-wrap mt-4">
-            {previewContent}
-          </DialogDescription>
-          {previewButtons.length > 0 && (
-            <div className="mt-4 flex flex-col gap-2">
-              {previewButtons.map((btn, idx) => (
-                <Button
-                  key={idx}
-                  variant={btn.type === 'URL' ? 'default' : 'outline'}
-                  className={
-                    btn.type === 'URL'
-                      ? 'bg-blue-600 text-white hover:bg-blue-700'
-                      : 'bg-transparent border-zinc-500 text-zinc-200 hover:bg-zinc-700'
-                  }
-                  onClick={() => {
-                    if (btn.type === 'URL' && btn.url) {
-                      window.open(btn.url, '_blank');
-                    } else {
-                      toast.success(`Quick Reply: ${btn.title || btn.name}`);
-                    }
-                  }}
-                >
-                  {btn.title || btn.name || `Button ${idx + 1}`}
-                </Button>
-              ))}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <Card className="bg-black border-zinc-800 p-8 w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-lg">
-            <div className="flex justify-between items-center mb-8">
-              <h2 className="text-2xl font-semibold text-white">
-                {editingTemplate ? 'Edit Template' : 'Create New Template'}
-              </h2>
-              <Button
-                variant="ghost"
-                onClick={handleCloseModal}
-                className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700"
+        ) : templates.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-64 border border-zinc-800 rounded-xl bg-zinc-900/50">
+            <div className="text-center p-8">
+              <FileText className="h-16 w-16 text-zinc-600 mx-auto mb-4" />
+              <h3 className="text-xl font-semibold text-zinc-300 mb-2">No Templates Found</h3>
+              <p className="text-zinc-500 mb-6 max-w-md">You don't have any message templates yet. Create your first template to get started.</p>
+              <button
+                className="bg-zinc-800 hover:bg-zinc-700 text-white font-medium px-5 h-12 rounded-xl transition-all duration-300 flex items-center gap-2 mx-auto"
+                onClick={() => handleOpenModal()}
+                disabled={isLoading}
               >
-                <X className="h-6 w-6" />
-              </Button>
+                <Plus className="h-5 w-5" />
+                Create First Template
+              </button>
             </div>
-            <form onSubmit={handleSubmit} className="space-y-8">
-              <div className="flex flex-col sm:flex-row gap-6">
-                <div className="flex-1">
-                  <label className="text-base font-medium text-zinc-400 mb-2 block">Title</label>
-                  <div className="relative">
-                    <FileText className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-zinc-500" />
-                    <Input
-                      className="pl-10 bg-zinc-900 border-zinc-800 text-zinc-200 h-12 text-base rounded-md"
-                      placeholder="Enter template name"
-                      value={templateName}
-                      onChange={(e) => setTemplateName(e.target.value)}
+          </div>
+        ) : (
+          <div className="space-y-6">
+            <Card className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-zinc-800 hover:bg-zinc-900">
+                    <TableHead className="text-zinc-400 font-semibold py-4 w-1/4 text-left">Name</TableHead>
+                    <TableHead className="text-zinc-400 font-semibold py-4 w-1/4 text-left">Message Type</TableHead>
+                    <TableHead className="text-zinc-400 font-semibold py-4 w-1/4 text-left">Message</TableHead>
+                    <TableHead className="text-zinc-400 font-semibold py-4 w-1/4 text-left">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {templates.map(template => (
+                    <TableRow key={template._id || Math.random().toString()} className="border-zinc-800 hover:bg-zinc-800/50">
+                      <TableCell className="text-zinc-200 py-4 w-1/4 text-left">{template.name || 'Unnamed'}</TableCell>
+                      <TableCell className="text-zinc-200 py-4 w-1/4 text-left">{template.messageType || 'N/A'}</TableCell>
+                      <TableCell className="text-zinc-200 py-4 w-1/4 text-left">
+                        <button
+                          onClick={() => handlePreview(template)}
+                          className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 px-3 py-1 rounded-lg transition-colors flex items-center gap-2"
+                        >
+                          <Eye className="h-4 w-4" />
+                          Preview
+                        </button>
+                      </TableCell>
+                      <TableCell className="text-zinc-200 py-4 w-1/4 text-left">
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleOpenModal(template)}
+                            className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 px-3 py-1 rounded-lg transition-colors flex items-center gap-2"
+                            disabled={isDeleting[template._id || ''] || !template._id}
+                          >
+                            <Edit className="h-4 w-4" />
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => template._id && handleDelete(template._id)}
+                            className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 px-3 py-1 rounded-lg transition-colors flex items-center gap-2"
+                            disabled={isDeleting[template._id || ''] || !template._id}
+                          >
+                            {isDeleting[template._id || ''] ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash className="h-4 w-4" />
+                            )}
+                            Delete
+                          </button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Card>
+
+            {/* Pagination */}
+            {templates.length > 0 && totalPages > 1 && (
+              <div className="flex flex-col sm:flex-row justify-between items-center mt-6 sm:mt-8 bg-zinc-900 border border-zinc-800 rounded-xl p-4 gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="text-zinc-400 text-sm">
+                    Showing {(currentPage - 1) * templatesPerPage + 1}-{Math.min(currentPage * templatesPerPage, totalTemplates)} of {totalTemplates} templates
+                  </span>
+                </div>
+                
+                <div className="flex items-center">
+                  <button
+                    onClick={handlePrevPage}
+                    disabled={currentPage === 1}
+                    className={`h-9 w-9 rounded-full transition-all duration-200 flex items-center justify-center ${
+                      currentPage === 1
+                        ? 'text-zinc-600 cursor-not-allowed'
+                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
+                    }`}
+                    aria-label="Previous page"
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                  </button>
+                  
+                  <div className="flex items-center gap-1 px-2">
+                    {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                      <button
+                        key={page}
+                        onClick={() => setCurrentPage(page)}
+                        className={`h-9 w-9 rounded-full transition-all duration-200 ${
+                          currentPage === page
+                            ? 'bg-zinc-800 text-white hover:bg-zinc-700'
+                            : 'bg-transparent hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200'
+                        }`}
+                        aria-label={`Page ${page}`}
+                      >
+                        {page}
+                      </button>
+                    ))}
+                  </div>
+                  
+                  <button
+                    onClick={handleNextPage}
+                    disabled={currentPage === totalPages}
+                    className={`h-9 w-9 rounded-full transition-all duration-200 flex items-center justify-center ${
+                      currentPage === totalPages
+                        ? 'text-zinc-600 cursor-not-allowed'
+                        : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
+                    }`}
+                    aria-label="Next page"
+                  >
+                    <ChevronRight className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Preview Dialog */}
+        <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+          <DialogContent className="bg-zinc-900 border-zinc-800 text-zinc-200 max-w-lg rounded-xl">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-semibold">Template Preview</DialogTitle>
+            </DialogHeader>
+            <DialogDescription className="text-zinc-400 leading-relaxed whitespace-pre-wrap mt-4">
+              {previewContent}
+            </DialogDescription>
+            {previewButtons.length > 0 && (
+              <div className="mt-4 flex flex-col gap-2">
+                {previewButtons.map((btn, idx) => (
+                  <Button
+                    key={idx}
+                    variant={btn.type === 'URL' ? 'default' : 'outline'}
+                    className={
+                      btn.type === 'URL'
+                        ? 'bg-blue-600 text-white hover:bg-blue-700'
+                        : 'bg-transparent border-zinc-500 text-zinc-200 hover:bg-zinc-700'
+                    }
+                    onClick={() => {
+                      if (btn.type === 'URL' && btn.url) {
+                        window.open(btn.url, '_blank');
+                      } else {
+                        showToast(`Quick Reply: ${btn.title || btn.name}`, 'success');
+                      }
+                    }}
+                  >
+                    {btn.title || btn.name || `Button ${idx + 1}`}
+                  </Button>
+                ))}
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Create/Edit Modal */}
+        {isModalOpen && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <Card className="bg-zinc-900 border border-zinc-800 p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-xl">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-semibold text-white">
+                  {editingTemplate ? 'Edit Template' : 'Create New Template'}
+                </h2>
+                <button
+                  onClick={handleCloseModal}
+                  className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 p-2 rounded-lg transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex-1">
+                    <Label className="text-zinc-400 font-medium mb-2 block">Title</Label>
+                    <div className="relative">
+                      <FileText className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-zinc-500" />
+                      <Input
+                        className="pl-10 bg-zinc-800 border-zinc-700 text-zinc-200 h-12 rounded-lg"
+                        placeholder="Enter template name"
+                        value={templateName}
+                        onChange={(e) => setTemplateName(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex-1">
+                    <Label className="text-zinc-400 font-medium mb-2 block">Message Type</Label>
+                    <div className="relative">
+                      <select
+                        className="w-full pl-10 pr-4 py-3 bg-zinc-800 border border-zinc-700 text-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-zinc-600 h-12 transition-all duration-300 ease-in-out"
+                        value={messageType}
+                        onChange={(e) => setMessageType(e.target.value)}
+                      >
+                        <option value="" disabled>Select message type</option>
+                        <option value="Text">Text</option>
+                        <option value="Buttons">Buttons</option>
+                      </select>
+                      <FileText className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-zinc-500" />
+                    </div>
+                  </div>
+                </div>
+                {messageType === 'Buttons' && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-zinc-400 font-medium mb-2 block">Header</Label>
+                      <div className="relative">
+                        <FileText className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-zinc-500" />
+                        <Input
+                          className="pl-10 bg-zinc-800 border-zinc-700 text-zinc-200 h-12 rounded-lg"
+                          placeholder="Enter header text"
+                          value={header}
+                          onChange={(e) => setHeader(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-zinc-400 font-medium mb-2 block">Footer</Label>
+                      <div className="relative">
+                        <FileText className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-zinc-500" />
+                        <Input
+                          className="pl-10 bg-zinc-800 border-zinc-700 text-zinc-200 h-12 rounded-lg"
+                          placeholder="Enter footer text"
+                          value={footer}
+                          onChange={(e) => setFooter(e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div className="grid gap-3">
+                  <Label className="text-zinc-400 font-medium mb-2 block">Message</Label>
+                  <div className="space-y-4">
+                    <div className="flex gap-3 flex-wrap items-center">
+                      <select
+                        className="pl-3 pr-4 py-2 bg-zinc-800 border border-zinc-700 text-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-zinc-600 h-10 transition-all duration-300 ease-in-out"
+                        onChange={(e) => handleVariableSelect(e.target.value)}
+                        defaultValue=""
+                      >
+                        <option value="" disabled>Insert variable</option>
+                        <option value="name">Name</option>
+                        <option value="number">Number</option>
+                        {Array.from({ length: 10 }, (_, i) => (
+                          <option key={i} value={`variable ${i + 1}`}>
+                            Variable {i + 1}
+                          </option>
+                        ))}
+                      </select>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => applyFormatting('bold')}
+                        className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700 h-10 px-4"
+                      >
+                        <Bold className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => applyFormatting('italic')}
+                        className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700 h-10 px-4"
+                      >
+                        <Italic className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => applyFormatting('strikeThrough')}
+                        className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700 h-10 px-4"
+                      >
+                        <Strikethrough className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => applyFormatting('insertUnorderedList')}
+                        className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700 h-10 px-4"
+                      >
+                        <List className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => applyFormatting('formatBlock')}
+                        className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700 h-10 px-4"
+                      >
+                        <Quote className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => applyFormatting('code')}
+                        className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700 h-10 px-4"
+                      >
+                        <Code className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div
+                      ref={editorRef}
+                      contentEditable
+                      className="bg-zinc-800 border border-zinc-700 text-zinc-200 rounded-lg p-4 min-h-[200px] focus:outline-none focus:ring-2 focus:ring-zinc-600"
+                      onInput={handleInput}
+                      style={{
+                        whiteSpace: 'pre-wrap',
+                        fontSize: '16px',
+                      }}
                     />
                   </div>
                 </div>
-                <div className="flex-1">
-                  <label className="text-base font-medium text-zinc-400 mb-2 block">Message Type</label>
-                  <div className="relative">
-                    <select
-                      className="w-full pl-10 pr-4 py-3 bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-md focus:outline-none focus:ring-2 focus:ring-zinc-700 h-12 text-base transition-all duration-300 ease-in-out"
-                      value={messageType}
-                      onChange={(e) => setMessageType(e.target.value)}
-                    >
-                      <option value="" disabled>Select message type</option>
-                      <option value="Text">Text</option>
-                      <option value="Buttons">Buttons</option>
-                    </select>
-                    <FileText className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-zinc-500" />
-                  </div>
-                </div>
-              </div>
-              {messageType === 'Buttons' && (
-                <>
-                  <div className="grid gap-3">
-                    <label className="text-base font-medium text-zinc-400 mb-2 block">Header</label>
-                    <div className="relative">
-                      <FileText className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-zinc-500" />
-                      <Input
-                        className="pl-10 bg-zinc-900 border-zinc-800 text-zinc-200 h-12 text-base rounded-md"
-                        placeholder="Enter header text"
-                        value={header}
-                        onChange={(e) => setHeader(e.target.value)}
-                      />
+                {messageType === 'Buttons' && (
+                  <div className="grid gap-4">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-zinc-400 font-medium">Buttons</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={addButton}
+                        disabled={buttons.length >= 3}
+                        className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700 h-10 px-4"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Button
+                      </Button>
                     </div>
-                  </div>
-                  <div className="grid gap-3">
-                    <label className="text-base font-medium text-zinc-400 mb-2 block">Footer</label>
-                    <div className="relative">
-                      <FileText className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-zinc-500" />
-                      <Input
-                        className="pl-10 bg-zinc-900 border-zinc-800 text-zinc-200 h-12 text-base rounded-md"
-                        placeholder="Enter footer text"
-                        value={footer}
-                        onChange={(e) => setFooter(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                </>
-              )}
-              <div className="grid gap-3">
-                <label className="text-base font-medium text-zinc-400 mb-2 block">Message</label>
-                <div className="space-y-4">
-                  <div className="flex gap-3 flex-wrap items-center">
-                    <select
-                      className="pl-3 pr-4 py-2 bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-md focus:outline-none focus:ring-2 focus:ring-zinc-700 h-10 text-base transition-all duration-300 ease-in-out"
-                      onChange={(e) => handleVariableSelect(e.target.value)}
-                      defaultValue=""
-                    >
-                      <option value="" disabled>Insert variable</option>
-                      <option value="name">Name</option>
-                      <option value="number">Number</option>
-                      {Array.from({ length: 10 }, (_, i) => (
-                        <option key={i} value={`variable ${i + 1}`}>
-                          Variable {i + 1}
-                        </option>
-                      ))}
-                    </select>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => applyFormatting('bold')}
-                      className="bg-zinc-900 border-zinc-800 text-zinc-200 hover:bg-zinc-700 h-10 px-4"
-                    >
-                      <Bold className="h-5 w-5" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => applyFormatting('italic')}
-                      className="bg-zinc-900 border-zinc-800 text-zinc-200 hover:bg-zinc-700 h-10 px-4"
-                    >
-                      <Italic className="h-5 w-5" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => applyFormatting('strikeThrough')}
-                      className="bg-zinc-900 border-zinc-800 text-zinc-200 hover:bg-zinc-700 h-10 px-4"
-                    >
-                      <Strikethrough className="h-5 w-5" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => applyFormatting('insertUnorderedList')}
-                      className="bg-zinc-900 border-zinc-800 text-zinc-200 hover:bg-zinc-700 h-10 px-4"
-                    >
-                      <List className="h-5 w-5" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => applyFormatting('formatBlock')}
-                      className="bg-zinc-900 border-zinc-800 text-zinc-200 hover:bg-zinc-700 h-10 px-4"
-                    >
-                      <Quote className="h-5 w-5" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => applyFormatting('code')}
-                      className="bg-zinc-900 border-zinc-800 text-zinc-200 hover:bg-zinc-700 h-10 px-4"
-                    >
-                      <Code className="h-5 w-5" />
-                    </Button>
-                  </div>
-                  <div
-                    ref={editorRef}
-                    contentEditable
-                    className="bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-md p-4 min-h-[200px] focus:outline-none focus:ring-2 focus:ring-zinc-700 text-lg"
-                    onInput={handleInput}
-                    style={{
-                      whiteSpace: 'pre-wrap',
-                      fontSize: '18px',
-                    }}
-                  />
-                </div>
-              </div>
-              {messageType === 'Buttons' && (
-                <div className="grid gap-4">
-                  <label className="text-base font-medium text-zinc-400 mb-2 block">Buttons</label>
-                  {buttons.map((button, index) => (
-                    <div key={index} className="bg-zinc-950 p-6 rounded-md space-y-4">
-                      <h3 className="text-lg font-bold text-zinc-200">{`Button ${index + 1}`}</h3>
-                      <div className="flex flex-col sm:flex-row gap-6 items-start">
-                        <div className="flex-1">
-                          <label className="text-base font-medium text-zinc-400 mb-2 block">Title</label>
-                          <Input
-                            className="bg-zinc-900 border-zinc-800 text-zinc-200 h-12 text-base rounded-md"
-                            placeholder={`Enter title for Button ${index + 1}`}
-                            value={button.name}
-                            onChange={(e) => handleButtonChange(index, 'name', e.target.value)}
-                          />
+                    {buttons.map((button, index) => (
+                      <div key={index} className="bg-zinc-800/50 border border-zinc-700 p-4 rounded-lg space-y-4">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-lg font-bold text-zinc-200">{`Button ${index + 1}`}</h3>
+                          {index > 0 && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => removeButton(index)}
+                              className="bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20 h-8 px-3"
+                            >
+                              <Minus className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
-                        <div className="flex-1">
-                          <label className="text-base font-medium text-zinc-400 mb-2 block">Type</label>
-                          <select
-                            className="w-full pl-3 pr-4 py-3 bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-md focus:outline-none focus:ring-2 focus:ring-zinc-700 h-12 text-base transition-all duration-300 ease-in-out"
-                            value={button.type}
-                            onChange={(e) => handleButtonChange(index, 'type', e.target.value as Button['type'])}
-                          >
-                            <option value="REPLY">Quick Reply</option>
-                            <option value="URL">URL</option>
-                            <option value="PHONE_NUMBER">Phone Number</option>
-                            <option value="UNSUBSCRIBE">Unsubscribe</option>
-                          </select>
-                        </div>
-                      </div>
-                      {button.type === 'URL' && (
-                        <div className="flex-1">
-                          <label className="text-base font-medium text-zinc-400 mb-2 block">URL</label>
-                          <div className="relative">
-                            <Link className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-zinc-500" />
+                        <div className="flex flex-col sm:flex-row gap-4 items-start">
+                          <div className="flex-1">
+                            <Label className="text-zinc-400 mb-2 block">Title</Label>
                             <Input
-                              className="pl-10 bg-zinc-900 border-zinc-800 text-zinc-200 h-12 text-base rounded-md"
-                              placeholder="Enter URL"
-                              value={button.url || ''}
-                              onChange={(e) => handleButtonChange(index, 'url', e.target.value)}
+                              className="bg-zinc-800 border-zinc-700 text-zinc-200 h-12 rounded-lg"
+                              placeholder={`Enter title for Button ${index + 1}`}
+                              value={button.name}
+                              onChange={(e) => handleButtonChange(index, 'name', e.target.value)}
                             />
                           </div>
+                          <div className="flex-1">
+                            <Label className="text-zinc-400 mb-2 block">Type</Label>
+                            <select
+                              className="w-full pl-3 pr-4 py-3 bg-zinc-800 border border-zinc-700 text-zinc-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-zinc-600 h-12 transition-all duration-300 ease-in-out"
+                              value={button.type}
+                              onChange={(e) => handleButtonChange(index, 'type', e.target.value as Button['type'])}
+                            >
+                              <option value="REPLY">Quick Reply</option>
+                              <option value="URL">URL</option>
+                              <option value="PHONE_NUMBER">Phone Number</option>
+                              <option value="UNSUBSCRIBE">Unsubscribe</option>
+                            </select>
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  ))}
+                        {button.type === 'URL' && (
+                          <div className="flex-1">
+                            <Label className="text-zinc-400 mb-2 block">URL</Label>
+                            <div className="relative">
+                              <Link className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-zinc-500" />
+                              <Input
+                                className="pl-10 bg-zinc-800 border-zinc-700 text-zinc-200 h-12 rounded-lg"
+                                placeholder="Enter URL"
+                                value={button.url || ''}
+                                onChange={(e) => handleButtonChange(index, 'url', e.target.value)}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex justify-end gap-4 mt-8">
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={addButton}
-                    className="bg-zinc-900 border-zinc-800 text-zinc-200 hover:bg-zinc-700 h-10 px-6 mt-4"
+                    onClick={handleCloseModal}
+                    className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700 h-12 px-6"
+                    disabled={isSubmitting}
                   >
-                    <Plus className="h-5 w-5 mr-2" />
-                    Add Button
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    className="bg-zinc-800 text-zinc-200 hover:bg-zinc-700 h-12 px-6"
+                    disabled={
+                      !templateName ||
+                      !messageType ||
+                      !editorRef.current?.innerText ||
+                      (messageType === 'Buttons' && buttons.every(btn => btn.name.trim() === '')) ||
+                      (messageType === 'Buttons' && buttons.some(btn => btn.type === 'URL' && !btn.url)) ||
+                      isSubmitting
+                    }
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        {editingTemplate ? 'Updating...' : 'Creating...'}
+                      </>
+                    ) : (
+                      editingTemplate ? 'Update Template' : 'Add Template'
+                    )}
                   </Button>
                 </div>
-              )}
-              <div className="flex justify-end gap-4 mt-8">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleCloseModal}
-                  className="bg-zinc-900 border-zinc-800 text-zinc-200 hover:bg-zinc-700 h-12 px-6 text-base"
-                  disabled={isSubmitting}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  className="bg-zinc-800 text-zinc-200 hover:bg-zinc-700 h-12 px-6 text-base"
-                  disabled={
-                    !templateName ||
-                    !messageType ||
-                    !editorRef.current?.innerText ||
-                    (messageType === 'Buttons' && buttons.every(btn => btn.name.trim() === '')) ||
-                    (messageType === 'Buttons' && buttons.some(btn => btn.type === 'URL' && !btn.url)) ||
-                    isSubmitting
-                  }
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                      {editingTemplate ? 'Updating...' : 'Creating...'}
-                    </>
-                  ) : (
-                    editingTemplate ? 'Update Template' : 'Add Template'
-                  )}
-                </Button>
-              </div>
-            </form>
-          </Card>
-        </div>
-      )}
+              </form>
+            </Card>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

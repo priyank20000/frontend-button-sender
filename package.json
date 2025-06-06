@@ -77,7 +77,7 @@
     "slate-history": "^0.113.1",
     "slate-react": "^0.114.2",
     "socket.io": "^4.7.5",
-    "socket.io-client": "^4.7.5",
+    "socket.io-client": "^4.8.1",
     "sonner": "^1.7.2",
     "tailwind-merge": "^2.2.1",
     "tailwindcss-animate": "^1.0.7",

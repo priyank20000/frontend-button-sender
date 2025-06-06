@@ -1,20 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import { Card, CardContent, CardFooter } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { useSocket } from "../../../hooks/useSocket";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import Cookies from 'js-cookie';
-import { useRouter } from 'next/navigation';
-import { Toaster, toast } from 'react-hot-toast';
-import { 
   Phone, 
   QrCode, 
   Edit, 
@@ -23,7 +11,9 @@ import {
   Plus, 
   ChevronLeft, 
   ChevronRight,
-  Loader2
+  Loader2,
+  Wifi,
+  WifiOff
 } from 'lucide-react';
 
 interface WhatsAppProfile {
@@ -36,6 +26,31 @@ interface Instance {
   _id: string;
   name?: string;
   whatsapp: WhatsAppProfile;
+}
+
+interface QREvent {
+  instanceId: string;
+  qr: string;
+}
+
+interface InstanceUpdateEvent {
+  instanceId: string;
+  _id: string;
+  userId: string;
+  token: string;
+  name: string;
+  whatsapp: {
+    status: string;
+    name: string;
+    phone: string;
+    bio: string;
+    profile: string | null;
+    disconnectReason: number;
+    qr: string;
+  };
+  createdAt: string;
+  updatedAt: string;
+  __v: number;
 }
 
 export default function DevicesPage() {
@@ -57,47 +72,174 @@ export default function DevicesPage() {
   const [isProcessingDelete, setIsProcessingDelete] = useState<{ [key: string]: boolean }>({});
   const [isProcessingEdit, setIsProcessingEdit] = useState<{ [key: string]: boolean }>({});
   const [selectedInstance, setSelectedInstance] = useState<Instance | null>(null);
+  const [token, setToken] = useState<string | null>(null);
 
-  const router = useRouter();
+  // Get token from cookies/localStorage
+  const getToken = (): string | null => {
+    // Check cookies first
+    const cookieToken = document.cookie
+      .split('; ')
+      .find(row => row.startsWith('token='))
+      ?.split('=')[1];
+    
+    if (cookieToken) {
+      console.log('Token found in cookies');
+      return cookieToken;
+    }
+    
+    // Check localStorage
+    const localToken = localStorage.getItem('token');
+    if (localToken) {
+      console.log('Token found in localStorage');
+      return localToken;
+    }
 
-  const getToken = async (): Promise<string | null | undefined> => {
-  let token: string | null | undefined = Cookies.get('token');
-  if (!token) {
-    token = localStorage.getItem('token');
-  }
-  if (!token) {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    token = Cookies.get('token') || localStorage.getItem('token');
-  }
-  return token;
-};
+    console.log('No token found');
+    return null;
+  };
+
+  // Initialize token
+  useEffect(() => {
+    const authToken = getToken();
+    console.log('Setting token:', authToken ? authToken.substring(0, 10) + '...' : 'null');
+    setToken(authToken);
+  }, []);
+
+  // Socket connection
+  const { emit, on, off, isConnected } = useSocket({
+    token,
+    onConnect: () => {
+      console.log('Socket connected successfully');
+      showToast('Socket connected', 'success');
+    },
+    onDisconnect: () => {
+      console.log('Socket disconnected');
+      showToast('Socket disconnected', 'error');
+    },
+    onError: (error) => {
+      console.error('Socket error:', error);
+      showToast('Socket connection error: ' + error.message, 'error');
+      
+      // If it's an authentication error, handle it
+      if (error.message.includes('Authentication failed') || error.message.includes('Not authorized')) {
+        handleUnauthorized();
+      }
+    }
+  });
+
+  // Socket event listeners
+  useEffect(() => {
+    if (!isConnected) {
+      console.log('Socket not connected, skipping event listeners');
+      return;
+    }
+
+    console.log('Setting up socket event listeners');
+
+    // Listen for QR code events
+    const handleQREvent = (data: QREvent) => {
+      console.log('Received QR event:', data);
+      if (data.instanceId === selectedInstanceId) {
+        setQrCode(data.qr);
+        setIsProcessingQR(prev => ({ ...prev, [data.instanceId]: false }));
+        showToast('QR code received', 'success');
+      }
+    };
+
+    // Listen for instance update events
+    const handleInstanceUpdate = (data: InstanceUpdateEvent) => {
+      console.log('Received instance update:', data);
+      
+      setInstances(prev => 
+        prev.map(instance => 
+          instance._id === data.instanceId 
+            ? {
+                ...instance,
+                name: data.name,
+                whatsapp: {
+                  phone: data.whatsapp.phone,
+                  status: data.whatsapp.status,
+                  profile: data.whatsapp.profile
+                }
+              }
+            : instance
+        )
+      );
+
+      // If this instance just got connected and we're showing QR for it, close QR and show success
+      if (data.whatsapp.status === 'connected' && data.instanceId === selectedInstanceId && showQR) {
+        setShowQR(false);
+        setConnectedInstance({
+          _id: data._id,
+          name: data.name,
+          whatsapp: {
+            phone: data.whatsapp.phone,
+            status: data.whatsapp.status,
+            profile: data.whatsapp.profile
+          }
+        });
+        setShowSuccessDialog(true);
+        setSelectedInstanceId(null);
+        showToast('WhatsApp connected successfully!', 'success');
+      }
+    };
+
+    on('instance.qr', handleQREvent);
+    on('instance.update', handleInstanceUpdate);
+
+    return () => {
+      console.log('Cleaning up socket event listeners');
+      off('instance.qr', handleQREvent);
+      off('instance.update', handleInstanceUpdate);
+    };
+  }, [isConnected, selectedInstanceId, showQR, on, off]);
+
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    // Simple toast implementation - you can replace with your preferred toast library
+    const toast = document.createElement('div');
+    toast.className = `fixed top-4 right-4 z-50 px-4 py-2 rounded-lg text-white ${
+      type === 'success' ? 'bg-emerald-600' : 'bg-red-600'
+    }`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+      if (document.body.contains(toast)) {
+        document.body.removeChild(toast);
+      }
+    }, 3000);
+  };
 
   const handleUnauthorized = () => {
     console.warn('Unauthorized response received');
-    toast.error('Session expired. Please log in again.');
-    Cookies.remove('token', { path: '/', secure: window.location.protocol === 'https:', sameSite: 'Lax' });
+    showToast('Session expired. Please log in again.', 'error');
+    
+    // Clear tokens
+    document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
     localStorage.removeItem('token');
-    Cookies.remove('user', { path: '/', secure: window.location.protocol === 'https:', sameSite: 'Lax' });
+    document.cookie = 'user=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
     localStorage.removeItem('user');
-    router.push('/login');
+    
+    // Redirect to login - you'll need to implement this based on your routing
+    window.location.href = '/login';
   };
 
   const fetchInstances = useCallback(async () => {
-    const token = await getToken();
-    if (!token) {
-      console.warn('No token found in cookie or localStorage, redirecting to login');
-      toast.error('Please log in to access your devices');
-      router.push('/login');
+    const authToken = getToken();
+    if (!authToken) {
+      console.warn('No token found, redirecting to login');
+      showToast('Please log in to access your devices', 'error');
+      window.location.href = '/login';
       return;
     }
 
     setIsLoading(true);
     try {
-      console.debug('Fetching instances with token:', token.substring(0, 10) + '...');
+      console.debug('Fetching instances with token:', authToken.substring(0, 10) + '...');
       const response = await fetch('https://whatsapp.recuperafly.com/api/instance/all', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({}),
@@ -113,78 +255,27 @@ export default function DevicesPage() {
         setInstances(data.instances || []);
       } else {
         console.error('API error:', data.message);
-        toast.error(data.message || 'Failed to fetch instances');
+        showToast(data.message || 'Failed to fetch instances', 'error');
       }
     } catch (err) {
       console.error('Error fetching instances:', err);
-      toast.error('Error fetching instances: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      showToast('Error fetching instances: ' + (err instanceof Error ? err.message : 'Unknown error'), 'error');
     } finally {
       setIsLoading(false);
     }
-  }, [router]);
+  }, []);
 
   useEffect(() => {
-    fetchInstances();
-  }, [fetchInstances]);
-
-  useEffect(() => {
-    let interval: NodeJS.Timeout | undefined;
-    if (showQR && selectedInstanceId) {
-      interval = setInterval(async () => {
-        const token = await getToken();
-        if (!token) {
-          console.warn('No token found during QR polling, redirecting to login');
-          toast.error('Please log in to continue');
-          router.push('/login');
-          setShowQR(false);
-          clearInterval(interval);
-          return;
-        }
-
-        try {
-          const response = await fetch('https://whatsapp.recuperafly.com/api/instance/all', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({}),
-          });
-
-          if (response.status === 401) {
-            handleUnauthorized();
-            setShowQR(false);
-            clearInterval(interval);
-            return;
-          }
-
-          const data = await response.json();
-          if (data.status) {
-            const updatedInstance = data.instances.find((inst: Instance) => inst._id === selectedInstanceId);
-            if (updatedInstance && updatedInstance.whatsapp.status === 'connected') {
-              setShowQR(false);
-              setConnectedInstance(updatedInstance);
-              setShowSuccessDialog(true);
-              setInstances(data.instances);
-              clearInterval(interval);
-            }
-          }
-        } catch (err) {
-          console.error('Error polling instance status:', err);
-        }
-      }, 3000);
+    if (token) {
+      fetchInstances();
     }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [showQR, selectedInstanceId, router]);
+  }, [token, fetchInstances]);
 
   const handleCreateInstance = async () => {
-    const token = await getToken();
-    if (!token) {
-      toast.error('Please log in to create an instance');
-      router.push('/login');
+    const authToken = getToken();
+    if (!authToken) {
+      showToast('Please log in to create an instance', 'error');
+      window.location.href = '/login';
       return;
     }
 
@@ -193,7 +284,7 @@ export default function DevicesPage() {
       const response = await fetch('https://whatsapp.recuperafly.com/api/instance/create', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json',
         },
       });
@@ -207,31 +298,41 @@ export default function DevicesPage() {
       if (data.status) {
         const newInstance = data.instance;
         setInstances((prev) => [...prev, newInstance]);
-        toast.success('Instance created successfully');
+        showToast('Instance created successfully');
       } else {
-        toast.error(data.message || 'Failed to create instance');
+        showToast(data.message || 'Failed to create instance', 'error');
       }
     } catch (err) {
-      toast.error('Error creating instance: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      showToast('Error creating instance: ' + (err instanceof Error ? err.message : 'Unknown error'), 'error');
     } finally {
       setIsCreating(false);
     }
   };
 
   const handleShowQR = async (instanceId: string) => {
-    const token = await getToken();
-    if (!token) {
-      toast.error('Please log in to view QR code');
-      router.push('/login');
+    const authToken = getToken();
+    if (!authToken) {
+      showToast('Please log in to view QR code', 'error');
+      window.location.href = '/login';
+      return;
+    }
+
+    if (!isConnected) {
+      showToast('Socket not connected. Please wait for connection.', 'error');
       return;
     }
 
     setIsProcessingQR(prev => ({ ...prev, [instanceId]: true }));
+    setSelectedInstanceId(instanceId);
+    setQrCode(''); // Clear previous QR code
+    setShowQR(true);
+
     try {
+      console.log('Requesting QR code for instance:', instanceId);
       const response = await fetch('https://whatsapp.recuperafly.com/api/instance/qr', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ instance_id: instanceId }),
@@ -243,25 +344,29 @@ export default function DevicesPage() {
       }
 
       const data = await response.json();
-      if (data.status) {
-        setQrCode(data.qr);
-        setSelectedInstanceId(instanceId);
-        setShowQR(true);
+      if (!data.status) {
+        showToast(data.message || 'Failed to request QR code', 'error');
+        setShowQR(false);
+        setSelectedInstanceId(null);
+        setIsProcessingQR(prev => ({ ...prev, [instanceId]: false }));
       } else {
-        toast.error(data.message || 'Failed to fetch QR code');
+        console.log('QR request successful, waiting for socket event...');
+        showToast('QR code requested, waiting for response...', 'success');
       }
+      // QR code will be received via socket event
     } catch (err) {
-      toast.error('Error fetching QR code: ' + (err instanceof Error ? err.message : 'Unknown error'));
-    } finally {
+      showToast('Error requesting QR code: ' + (err instanceof Error ? err.message : 'Unknown error'), 'error');
+      setShowQR(false);
+      setSelectedInstanceId(null);
       setIsProcessingQR(prev => ({ ...prev, [instanceId]: false }));
     }
   };
 
   const handleDeleteInstance = async (instanceId: string) => {
-    const token = await getToken();
-    if (!token) {
-      toast.error('Please log in to delete instance');
-      router.push('/login');
+    const authToken = getToken();
+    if (!authToken) {
+      showToast('Please log in to delete instance', 'error');
+      window.location.href = '/login';
       return;
     }
 
@@ -270,7 +375,7 @@ export default function DevicesPage() {
       const response = await fetch('https://whatsapp.recuperafly.com/api/instance/delete', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ instanceId }),
@@ -284,26 +389,26 @@ export default function DevicesPage() {
       const data = await response.json();
       if (data.status) {
         setInstances((prev) => prev.filter((instance) => instance._id !== instanceId));
-        toast.success(data.message || 'Instance deleted successfully');
+        showToast(data.message || 'Instance deleted successfully');
         const totalPages = Math.ceil((instances.length - 1) / instancesPerPage);
         if (currentPage > totalPages && totalPages > 0) {
           setCurrentPage(totalPages);
         }
       } else {
-        toast.error(data.message || 'Failed to delete instance');
+        showToast(data.message || 'Failed to delete instance', 'error');
       }
     } catch (err) {
-      toast.error('Error deleting instance: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      showToast('Error deleting instance: ' + (err instanceof Error ? err.message : 'Unknown error'), 'error');
     } finally {
       setIsProcessingDelete(prev => ({ ...prev, [instanceId]: false }));
     }
   };
 
   const handleLogoutInstance = async (instanceId: string) => {
-    const token = await getToken();
-    if (!token) {
-      toast.error('Please log in to log out instance');
-      router.push('/login');
+    const authToken = getToken();
+    if (!authToken) {
+      showToast('Please log in to log out instance', 'error');
+      window.location.href = '/login';
       return;
     }
 
@@ -312,7 +417,7 @@ export default function DevicesPage() {
       const response = await fetch('https://whatsapp.recuperafly.com/api/instance/logout', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ instanceId }),
@@ -340,27 +445,27 @@ export default function DevicesPage() {
               : instance
           )
         );
-        toast.success(data.message || 'Logged out successfully');
+        showToast(data.message || 'Logged out successfully');
       } else {
-        toast.error(data.message || 'Failed to log out');
+        showToast(data.message || 'Failed to log out', 'error');
       }
     } catch (err) {
-      toast.error('Error logging out: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      showToast('Error logging out: ' + (err instanceof Error ? err.message : 'Unknown error'), 'error');
     } finally {
       setIsProcessingLogout(prev => ({ ...prev, [instanceId]: false }));
     }
   };
 
   const handleEditInstance = async () => {
-    const token = await getToken();
-    if (!token) {
-      toast.error('Please log in to edit instance');
-      router.push('/login');
+    const authToken = getToken();
+    if (!authToken) {
+      showToast('Please log in to edit instance', 'error');
+      window.location.href = '/login';
       return;
     }
 
     if (!editInstanceName.trim()) {
-      toast.error('Please enter a valid name');
+      showToast('Please enter a valid name', 'error');
       return;
     }
 
@@ -369,7 +474,7 @@ export default function DevicesPage() {
       const response = await fetch('https://whatsapp.recuperafly.com/api/instance/edit', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`,
+          'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
@@ -392,16 +497,16 @@ export default function DevicesPage() {
               : instance
           )
         );
-        toast.success(data.message || 'Instance name updated successfully');
+        showToast(data.message || 'Instance name updated successfully');
         setShowEditDialog(false);
         setEditInstanceId(null);
         setEditInstanceName('');
         setSelectedInstance(null);
       } else {
-        toast.error(data.message || 'Failed to update instance name');
+        showToast(data.message || 'Failed to update instance name', 'error');
       }
     } catch (err) {
-      toast.error('Error updating instance name: ' + (err instanceof Error ? err.message : 'Unknown error'));
+      showToast('Error updating instance name: ' + (err instanceof Error ? err.message : 'Unknown error'), 'error');
     } finally {
       setIsProcessingEdit(prev => ({ ...prev, [editInstanceId!]: false }));
     }
@@ -445,37 +550,48 @@ export default function DevicesPage() {
   const totalPages = Math.ceil(instances.length / instancesPerPage);
 
   return (
-    <div className="space-y-8 p-6 max-w-7xl mx-auto bg-zinc-950">
-      <Toaster position="top-right" toastOptions={{ 
-        duration: 3000,
-        style: {
-          background: '#18181b',
-          color: '#fff',
-          borderRadius: '8px',
-        },
-      }} />
+    <div className="space-y-8 p-6 max-w-7xl mx-auto bg-zinc-950 min-h-screen">
       
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold text-white">
-          WhatsApp Devices
-        </h1>
-        <Button
-          className="bg-zinc-800 hover:bg-zinc-700 text-white font-medium px-5 py-2 h-12 rounded-xl transition-all duration-300"
+        <div className="flex items-center gap-4">
+          <h1 className="text-3xl font-bold text-white">
+            WhatsApp Devices
+          </h1>
+          <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm ${
+            isConnected 
+              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+              : 'bg-red-500/10 text-red-400 border border-red-500/20'
+          }`}>
+            {isConnected ? (
+              <>
+                <Wifi className="h-4 w-4" />
+                Connected
+              </>
+            ) : (
+              <>
+                <WifiOff className="h-4 w-4" />
+                Disconnected
+              </>
+            )}
+          </div>
+        </div>
+        <button
+          className="bg-zinc-800 hover:bg-zinc-700 text-white font-medium px-5 py-2 h-12 rounded-xl transition-all duration-300 flex items-center gap-2"
           onClick={handleCreateInstance}
           disabled={isCreating}
         >
           {isCreating ? (
             <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              <Loader2 className="h-4 w-4 animate-spin" />
               Creating...
             </>
           ) : (
             <>
-              <Plus className="mr-2 h-5 w-5" />
+              <Plus className="h-5 w-5" />
               Create Instance
             </>
           )}
-        </Button>
+        </button>
       </div>
 
       {isLoading ? (
@@ -491,33 +607,33 @@ export default function DevicesPage() {
             <Phone className="h-16 w-16 text-zinc-600 mx-auto mb-4" />
             <h3 className="text-xl font-semibold text-zinc-300 mb-2">No Devices Found</h3>
             <p className="text-zinc-500 mb-6 max-w-md">You don't have any WhatsApp instances yet. Create your first instance to get started.</p>
-            <Button
-              className="bg-zinc-800 hover:bg-zinc-700 text-white font-medium px-5 h-12 rounded-xl transition-all duration-300"
+            <button
+              className="bg-zinc-800 hover:bg-zinc-700 text-white font-medium px-5 h-12 rounded-xl transition-all duration-300 flex items-center gap-2"
               onClick={handleCreateInstance}
               disabled={isCreating}
             >
               {isCreating ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                   Creating...
                 </>
               ) : (
                 <>
-                  <Plus className="mr-2 h-5 w-5" />
+                  <Plus className="h-5 w-5" />
                   Create First Instance
                 </>
               )}
-            </Button>
+            </button>
           </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {currentInstances.map((instance, index) => (
-            <Card 
+            <div 
               key={instance._id} 
-              className="bg-zinc-900 border-zinc-800 hover:border-zinc-700 rounded-xl overflow-hidden transition-all duration-300"
+              className="bg-zinc-900 border border-zinc-800 hover:border-zinc-700 rounded-xl overflow-hidden transition-all duration-300"
             >
-              <CardContent className="p-5">
+              <div className="p-5">
                 <div className="flex items-center gap-4">
                   {instance.whatsapp.profile ? (
                     <div className="relative">
@@ -560,14 +676,12 @@ export default function DevicesPage() {
                     </div>
                   </div>
                 </div>
-              </CardContent>
+              </div>
 
-              <CardFooter className="border-t border-zinc-800/50 p-4 flex gap-2">
+              <div className="border-t border-zinc-800/50 p-4 flex gap-2">
                 {instance.whatsapp.status === 'connected' ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/20 hover:border-red-500/30"
+                  <button
+                    className="flex-1 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 hover:border-red-500/30 px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
                     onClick={() => handleLogoutInstance(instance._id)}
                     disabled={isProcessingLogout[instance._id]}
                   >
@@ -575,33 +689,29 @@ export default function DevicesPage() {
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       <>
-                        <LogOut className="mr-1.5 h-4 w-4" />
+                        <LogOut className="h-4 w-4" />
                         Log Out
                       </>
                     )}
-                  </Button>
+                  </button>
                 ) : (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="flex-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border-emerald-500/20 hover:border-emerald-500/30"
+                  <button
+                    className="flex-1 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 hover:border-emerald-500/30 px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
                     onClick={() => handleShowQR(instance._id)}
-                    disabled={isProcessingQR[instance._id]}
+                    disabled={isProcessingQR[instance._id] || !isConnected}
                   >
                     {isProcessingQR[instance._id] ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       <>
-                        <QrCode className="mr-1.5 h-4 w-4" />
+                        <QrCode className="h-4 w-4" />
                         Show QR
                       </>
                     )}
-                  </Button>
+                  </button>
                 )}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border-zinc-700"
+                <button
+                  className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
                   onClick={() => openEditDialog(instance._id, instance.name)}
                   disabled={isProcessingEdit[instance._id]}
                 >
@@ -609,15 +719,13 @@ export default function DevicesPage() {
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (
                     <>
-                      <Edit className="mr-1.5 h-4 w-4" />
+                      <Edit className="h-4 w-4" />
                       Edit
                     </>
                   )}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/20 hover:border-red-500/30"
+                </button>
+                <button
+                  className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 hover:border-red-500/30 px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center"
                   onClick={() => handleDeleteInstance(instance._id)}
                   disabled={isProcessingDelete[instance._id]}
                 >
@@ -626,9 +734,9 @@ export default function DevicesPage() {
                   ) : (
                     <Trash2 className="h-4 w-4" />
                   )}
-                </Button>
-              </CardFooter>
-            </Card>
+                </button>
+              </div>
+            </div>
           ))}
         </div>
       )}
@@ -642,12 +750,10 @@ export default function DevicesPage() {
           </div>
           
           <div className="flex items-center">
-            <Button
+            <button
               onClick={handlePrevPage}
               disabled={currentPage === 1}
-              variant="ghost"
-              size="icon"
-              className={`h-9 w-9 rounded-full transition-all duration-200 ${
+              className={`h-9 w-9 rounded-full transition-all duration-200 flex items-center justify-center ${
                 currentPage === 1
                   ? 'text-zinc-600 cursor-not-allowed'
                   : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
@@ -655,11 +761,11 @@ export default function DevicesPage() {
               aria-label="Previous page"
             >
               <ChevronLeft className="h-5 w-5" />
-            </Button>
+            </button>
             
             <div className="flex items-center gap-1 px-2">
               {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                <Button
+                <button
                   key={page}
                   onClick={() => setCurrentPage(page)}
                   className={`h-9 w-9 rounded-full transition-all duration-200 ${
@@ -670,16 +776,14 @@ export default function DevicesPage() {
                   aria-label={`Page ${page}`}
                 >
                   {page}
-                </Button>
+                </button>
               ))}
             </div>
             
-            <Button
+            <button
               onClick={handleNextPage}
               disabled={currentPage === totalPages}
-              variant="ghost"
-              size="icon"
-              className={`h-9 w-9 rounded-full transition-all duration-200 ${
+              className={`h-9 w-9 rounded-full transition-all duration-200 flex items-center justify-center ${
                 currentPage === totalPages
                   ? 'text-zinc-600 cursor-not-allowed'
                   : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
@@ -687,131 +791,140 @@ export default function DevicesPage() {
               aria-label="Next page"
             >
               <ChevronRight className="h-5 w-5" />
-            </Button>
+            </button>
           </div>
         </div>
       )}
 
-      <Dialog open={showQR} onOpenChange={setShowQR}>
-        <DialogContent className="bg-zinc-900 border-zinc-800 text-zinc-200 rounded-xl sm:max-w-[800px]">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-semibold">Connect WhatsApp Device</DialogTitle>
-            <DialogDescription className="text-zinc-400">
-              Scan this QR code with your WhatsApp mobile app to connect
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex items-start justify-between p-6 gap-8">
-            <div className="flex-shrink-0">
-              {qrCode ? (
-                <div className="bg-white p-4 rounded-lg overflow-hidden transition-all duration-300 animate-in fade-in-0">
-                  <img src={qrCode} alt="QR Code" className="max-w-[300px]" />
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center h-[300px] w-[300px]">
-                  <Loader2 className="h-10 w-10 text-zinc-500 animate-spin mb-4" />
-                  <p className="text-zinc-400">Generating QR code...</p>
-                </div>
-              )}
-            </div>
-            <div className="flex-1">
-              <div className="space-y-6">
-                <div className="bg-zinc-800/50 border border-zinc-800 rounded-lg p-6">
-                  <h3 className="text-lg font-semibold text-zinc-200 mb-4">How to Connect</h3>
-                  <div className="space-y-4">
-                    <div className="flex items-start gap-3">
-                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center text-zinc-300 text-sm">1</div>
-                      <p className="text-zinc-300">Open WhatsApp on your phone</p>
-                    </div>
-                    <div className="flex items-start gap-3">
-                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center text-zinc-300 text-sm">2</div>
-                      <p className="text-zinc-300">Tap Menu or Settings and select Linked Devices</p>
-                    </div>
-                    <div className="flex items-start gap-3">
-                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center text-zinc-300 text-sm">3</div>
-                      <p className="text-zinc-300">Tap on "Link a Device"</p>
-                    </div>
-                    <div className="flex items-start gap-3">
-                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center text-zinc-300 text-sm">4</div>
-                      <p className="text-zinc-300">Point your phone to this screen to capture the code</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4">
-                  <p className="text-emerald-400 text-sm">
-                    Once connected, you'll be able to use WhatsApp on this device
-                  </p>
-                </div>
+      {/* QR Code Dialog */}
+      {showQR && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-xl p-6 max-w-4xl w-full mx-4">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h2 className="text-xl font-semibold">Connect WhatsApp Device</h2>
+                <p className="text-zinc-400">Scan this QR code with your WhatsApp mobile app to connect</p>
               </div>
+              <button
+                onClick={() => {
+                  setShowQR(false);
+                  setSelectedInstanceId(null);
+                  setQrCode('');
+                }}
+                className="text-zinc-400 hover:text-zinc-200"
+              >
+                ✕
+              </button>
             </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
-        <DialogContent className="bg-zinc-900 border-zinc-800 text-zinc-200 rounded-xl sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-semibold text-center">
-              <span className="text-emerald-400">
-                WhatsApp Connected Successfully!
-              </span>
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex flex-col items-center p-6">
-            {connectedInstance && (
-              <div className="flex flex-col items-center animate-in fade-in-0 zoom-in-95">
-                {connectedInstance.whatsapp.profile ? (
-                  <div className="relative">
-                    <img
-                      src={connectedInstance.whatsapp.profile}
-                      alt="WhatsApp Profile"
-                      className="w-24 h-24 rounded-full mb-4 border-4 border-emerald-500/20"
-                    />
-                    <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 border-4 border-zinc-900"></div>
+            
+            <div className="flex items-start justify-between gap-8">
+              <div className="flex-shrink-0">
+                {qrCode ? (
+                  <div className="bg-white p-4 rounded-lg overflow-hidden transition-all duration-300">
+                    <img src={qrCode} alt="QR Code" className="max-w-[300px]" />
                   </div>
                 ) : (
-                  <div className="w-24 h-24 rounded-full bg-zinc-800 flex items-center justify-center mb-4 border-4 border-emerald-500/20">
-                    <Phone className="h-12 w-12 text-emerald-400" />
+                  <div className="flex flex-col items-center justify-center h-[300px] w-[300px]">
+                    <Loader2 className="h-10 w-10 text-zinc-500 animate-spin mb-4" />
+                    <p className="text-zinc-400">Waiting for QR code...</p>
                   </div>
                 )}
-                <p className="text-lg font-medium text-zinc-200 mt-4">
-                  {connectedInstance.whatsapp.phone || 'Unknown'}
-                </p>
-                {connectedInstance.name && (
-                  <p className="text-sm text-zinc-400 mt-1">
-                    {connectedInstance.name}
-                  </p>
-                )}
-                <div className="mt-6 bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4 text-sm text-emerald-400 w-full text-center">
-                  <p>Your WhatsApp account is now successfully connected and ready to use!</p>
-                </div>
-                <Button
-                  className="mt-6 bg-zinc-800 hover:bg-zinc-700 text-white font-medium px-6 py-2 h-12 rounded-xl transition-all duration-300"
-                  onClick={() => setShowSuccessDialog(false)}
-                >
-                  Continue
-                </Button>
               </div>
-            )}
+              
+              <div className="flex-1">
+                <div className="space-y-6">
+                  <div className="bg-zinc-800/50 border border-zinc-800 rounded-lg p-6">
+                    <h3 className="text-lg font-semibold text-zinc-200 mb-4">How to Connect</h3>
+                    <div className="space-y-4">
+                      <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center text-zinc-300 text-sm">1</div>
+                        <p className="text-zinc-300">Open WhatsApp on your phone</p>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center text-zinc-300 text-sm">2</div>
+                        <p className="text-zinc-300">Tap Menu or Settings and select Linked Devices</p>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center text-zinc-300 text-sm">3</div>
+                        <p className="text-zinc-300">Tap on "Link a Device"</p>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center text-zinc-300 text-sm">4</div>
+                        <p className="text-zinc-300">Point your phone to this screen to capture the code</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4">
+                    <p className="text-emerald-400 text-sm">
+                      Once connected, you'll be able to use WhatsApp on this device
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-        </DialogContent>
-      </Dialog>
+        </div>
+      )}
 
-      <Dialog open={showEditDialog} onOpenChange={(open) => {
-        setShowEditDialog(open);
-        if (!open) {
-          setEditInstanceId(null);
-          setEditInstanceName('');
-          setSelectedInstance(null);
-        }
-      }}>
-        <DialogContent className="bg-zinc-900 border-zinc-800 text-zinc-200 rounded-xl sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-semibold">Edit Device Name</DialogTitle>
-            <DialogDescription className="text-zinc-400">
-              Give your WhatsApp device a memorable name
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col items-center p-6">
+      {/* Success Dialog */}
+      {showSuccessDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-xl p-6 max-w-md w-full mx-4">
+            <div className="text-center">
+              <h2 className="text-xl font-semibold mb-6 text-emerald-400">
+                WhatsApp Connected Successfully!
+              </h2>
+              
+              {connectedInstance && (
+                <div className="flex flex-col items-center mb-6">
+                  {connectedInstance.whatsapp.profile ? (
+                    <div className="relative">
+                      <img
+                        src={connectedInstance.whatsapp.profile}
+                        alt="WhatsApp Profile"
+                        className="w-24 h-24 rounded-full mb-4 border-4 border-emerald-500/20"
+                      />
+                      <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-500 border-4 border-zinc-900"></div>
+                    </div>
+                  ) : (
+                    <div className="w-24 h-24 rounded-full bg-zinc-800 flex items-center justify-center mb-4 border-4 border-emerald-500/20">
+                      <Phone className="h-12 w-12 text-emerald-400" />
+                    </div>
+                  )}
+                  <p className="text-lg font-medium text-zinc-200 mt-4">
+                    {connectedInstance.whatsapp.phone || 'Unknown'}
+                  </p>
+                  {connectedInstance.name && (
+                    <p className="text-sm text-zinc-400 mt-1">
+                      {connectedInstance.name}
+                    </p>
+                  )}
+                  <div className="mt-6 bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-4 text-sm text-emerald-400 w-full text-center">
+                    <p>Your WhatsApp account is now successfully connected and ready to use!</p>
+                  </div>
+                </div>
+              )}
+              
+              <button
+                className="bg-zinc-800 hover:bg-zinc-700 text-white font-medium px-6 py-2 h-12 rounded-xl transition-all duration-300"
+                onClick={() => setShowSuccessDialog(false)}
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Dialog */}
+      {showEditDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-zinc-900 border border-zinc-800 text-zinc-200 rounded-xl p-6 max-w-md w-full mx-4">
+            <div className="mb-6">
+              <h2 className="text-xl font-semibold">Edit Device Name</h2>
+              <p className="text-zinc-400">Give your WhatsApp device a memorable name</p>
+            </div>
+            
             {selectedInstance && (
               <div className="mb-6 flex flex-col items-center">
                 {selectedInstance.whatsapp.profile ? (
@@ -840,23 +953,23 @@ export default function DevicesPage() {
                 </p>
               </div>
             )}
-            <div className="w-full space-y-4">
+            
+            <div className="space-y-4">
               <div className="space-y-2">
                 <label htmlFor="instanceName" className="text-sm font-medium text-zinc-400">
-                  *Instance Name
+                  Instance Name
                 </label>
-                <Input
+                <input
                   id="instanceName"
                   value={editInstanceName}
                   onChange={(e) => setEditInstanceName(e.target.value)}
                   placeholder="Enter device name"
-                  className="bg-zinc-800 border-zinc-700 text-zinc-200 focus:border-zinc-600"
+                  className="w-full bg-zinc-800 border border-zinc-700 text-zinc-200 focus:border-zinc-600 px-3 py-2 rounded-lg focus:outline-none"
                 />
               </div>
               <div className="flex gap-3 justify-end">
-                <Button
-                  variant="outline"
-                  className="text-zinc-300 border-zinc-700 hover:bg-zinc-800 hover:text-zinc-200"
+                <button
+                  className="text-zinc-300 border border-zinc-700 hover:bg-zinc-800 hover:text-zinc-200 px-4 py-2 rounded-lg transition-colors"
                   onClick={() => {
                     setShowEditDialog(false);
                     setEditInstanceId(null);
@@ -865,21 +978,21 @@ export default function DevicesPage() {
                   }}
                 >
                   Cancel
-                </Button>
-                <Button
-                  className="bg-zinc-800 hover:bg-zinc-700 text-white"
+                </button>
+                <button
+                  className="bg-zinc-800 hover:bg-zinc-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
                   onClick={handleEditInstance}
                   disabled={!editInstanceName.trim() || isProcessingEdit[editInstanceId!]}
                 >
                   {isProcessingEdit[editInstanceId!] ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : 'Save Changes'}
-                </Button>
+                </button>
               </div>
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
+        </div>
+      )}
     </div>
   );
 }

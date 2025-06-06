@@ -25,7 +25,6 @@ import {
   ChevronRight,
   Loader2
 } from 'lucide-react';
-import io, { Socket } from 'socket.io-client';
 
 interface WhatsAppProfile {
   phone?: string | null;
@@ -58,21 +57,20 @@ export default function DevicesPage() {
   const [isProcessingDelete, setIsProcessingDelete] = useState<{ [key: string]: boolean }>({});
   const [isProcessingEdit, setIsProcessingEdit] = useState<{ [key: string]: boolean }>({});
   const [selectedInstance, setSelectedInstance] = useState<Instance | null>(null);
-  const [socket, setSocket] = useState<Socket | null>(null);
 
   const router = useRouter();
 
   const getToken = async (): Promise<string | null | undefined> => {
-    let token: string | null | undefined = Cookies.get('token');
-    if (!token) {
-      token = localStorage.getItem('token');
-    }
-    if (!token) {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      token = Cookies.get('token') || localStorage.getItem('token');
-    }
-    return token;
-  };
+  let token: string | null | undefined = Cookies.get('token');
+  if (!token) {
+    token = localStorage.getItem('token');
+  }
+  if (!token) {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    token = Cookies.get('token') || localStorage.getItem('token');
+  }
+  return token;
+};
 
   const handleUnauthorized = () => {
     console.warn('Unauthorized response received');
@@ -83,88 +81,6 @@ export default function DevicesPage() {
     localStorage.removeItem('user');
     router.push('/login');
   };
-
-  const initializeSocket = useCallback(async () => {
-    const token = await getToken();
-    if (!token) {
-      toast.error('Please log in to connect');
-      router.push('/login');
-      return;
-    }
-
-    const newSocket = io('https://whatsapp.recuperafly.com', {
-      query: { token },
-      reconnection: true,
-      reconnectionAttempts: 5,
-      reconnectionDelay: 1000,
-      transports: ['websocket'],
-    });
-
-    newSocket.on('connect', () => {
-      console.log('Socket connected');
-      newSocket.emit('join', { userId: token });
-    });
-
-    newSocket.on('connect_error', (err) => {
-      console.error('Socket connection error:', err.message);
-      toast.error('Failed to connect to server. Retrying...');
-    });
-
-    newSocket.on('qr', ({ instanceId, qr }) => {
-      if (instanceId === selectedInstanceId) {
-        setQrCode(qr);
-        setShowQR(true);
-      }
-    });
-
-    newSocket.on('instanceConnected', ({ instanceId, instance }) => {
-      if (instanceId === selectedInstanceId) {
-        setShowQR(false);
-        setConnectedInstance(instance);
-        setShowSuccessDialog(true);
-        setInstances((prev) =>
-          prev.map((inst) =>
-            inst._id === instanceId ? { ...inst, whatsapp: instance.whatsapp } : inst
-          )
-        );
-        toast.success('WhatsApp connected successfully!');
-      }
-    });
-
-    newSocket.on('instanceDisconnected', ({ instanceId }) => {
-      setInstances((prev) =>
-        prev.map((inst) =>
-          inst._id === instanceId
-            ? {
-                ...inst,
-                whatsapp: { ...inst.whatsapp, status: 'disconnected', phone: null, profile: null },
-              }
-            : inst
-        )
-      );
-      if (instanceId === selectedInstanceId) {
-        setShowQR(false);
-        setQrCode('');
-        setSelectedInstanceId(null);
-      }
-      toast.success('Instance logged out successfully');
-    });
-
-    newSocket.on('error', (error) => {
-      console.error('Socket error:', error);
-      toast.error(error.message || 'An error occurred');
-      if (error.message === 'Unauthorized') {
-        handleUnauthorized();
-        newSocket.disconnect();
-      }
-    });
-
-    setSocket(newSocket);
-
-    return () => {
-      newSocket.disconnect();
-    };
-  }, [selectedInstanceId, router]);
 
   const fetchInstances = useCallback(async () => {
     const token = await getToken();
@@ -209,11 +125,60 @@ export default function DevicesPage() {
 
   useEffect(() => {
     fetchInstances();
-    const cleanup = initializeSocket();
+  }, [fetchInstances]);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout | undefined;
+    if (showQR && selectedInstanceId) {
+      interval = setInterval(async () => {
+        const token = await getToken();
+        if (!token) {
+          console.warn('No token found during QR polling, redirecting to login');
+          toast.error('Please log in to continue');
+          router.push('/login');
+          setShowQR(false);
+          clearInterval(interval);
+          return;
+        }
+
+        try {
+          const response = await fetch('https://whatsapp.recuperafly.com/api/instance/all', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({}),
+          });
+
+          if (response.status === 401) {
+            handleUnauthorized();
+            setShowQR(false);
+            clearInterval(interval);
+            return;
+          }
+
+          const data = await response.json();
+          if (data.status) {
+            const updatedInstance = data.instances.find((inst: Instance) => inst._id === selectedInstanceId);
+            if (updatedInstance && updatedInstance.whatsapp.status === 'connected') {
+              setShowQR(false);
+              setConnectedInstance(updatedInstance);
+              setShowSuccessDialog(true);
+              setInstances(data.instances);
+              clearInterval(interval);
+            }
+          }
+        } catch (err) {
+          console.error('Error polling instance status:', err);
+        }
+      }, 3000);
+    }
+
     return () => {
-      if (typeof cleanup === 'function') cleanup();
+      if (interval) clearInterval(interval);
     };
-  }, [fetchInstances, initializeSocket]);
+  }, [showQR, selectedInstanceId, router]);
 
   const handleCreateInstance = async () => {
     const token = await getToken();
@@ -261,17 +226,31 @@ export default function DevicesPage() {
       return;
     }
 
-    if (!socket) {
-      toast.error('Socket not initialized. Please try again.');
-      return;
-    }
-
     setIsProcessingQR(prev => ({ ...prev, [instanceId]: true }));
     try {
-      socket.emit('generateQR', { instanceId });
-      setSelectedInstanceId(instanceId);
+      const response = await fetch('https://whatsapp.recuperafly.com/api/instance/qr', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ instance_id: instanceId }),
+      });
+
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+
+      const data = await response.json();
+      if (data.status) {
+        setQrCode(data.qr);
+        setSelectedInstanceId(instanceId);
+        setShowQR(true);
+      } else {
+        toast.error(data.message || 'Failed to fetch QR code');
+      }
     } catch (err) {
-      console.error('Error emitting generateQR:', err);
       toast.error('Error fetching QR code: ' + (err instanceof Error ? err.message : 'Unknown error'));
     } finally {
       setIsProcessingQR(prev => ({ ...prev, [instanceId]: false }));
@@ -346,7 +325,21 @@ export default function DevicesPage() {
 
       const data = await response.json();
       if (data.status) {
-        // Socket will handle the state update via 'instanceDisconnected' event
+        setInstances((prev) =>
+          prev.map((instance) =>
+            instance._id === instanceId
+              ? { 
+                  ...instance, 
+                  whatsapp: { 
+                    ...instance.whatsapp, 
+                    status: 'disconnected',
+                    phone: null,
+                    profile: null
+                  } 
+                }
+              : instance
+          )
+        );
         toast.success(data.message || 'Logged out successfully');
       } else {
         toast.error(data.message || 'Failed to log out');

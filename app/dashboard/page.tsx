@@ -61,30 +61,30 @@ export default function DashboardOverview() {
     }
   });
 
-  useEffect(() => {
-    const fetchAnalytics = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const response = await fetch('https://bulkwhasapp-backend.onrender.com/api/analytics', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
+  // useEffect(() => {
+  //   const fetchAnalytics = async () => {
+  //     try {
+  //       const token = localStorage.getItem('token');
+  //       const response = await fetch('https://bulkwhasapp-backend.onrender.com/api/analytics', {
+  //         headers: {
+  //           'Authorization': `Bearer ${token}`
+  //         }
+  //       });
         
-        const data = await response.json();
-        if (data.status) {
-          setAnalytics(data.data);
-        }
-      } catch (error) {
-        console.error('Error fetching analytics:', error);
-      }
-    };
+  //       const data = await response.json();
+  //       if (data.status) {
+  //         setAnalytics(data.data);
+  //       }
+  //     } catch (error) {
+  //       console.error('Error fetching analytics:', error);
+  //     }
+  //   };
 
-    fetchAnalytics();
-    // Refresh analytics every 5 minutes
-    const interval = setInterval(fetchAnalytics, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, []);
+  //   fetchAnalytics();
+  //   // Refresh analytics every 5 minutes
+  //   const interval = setInterval(fetchAnalytics, 5 * 60 * 1000);
+  //   return () => clearInterval(interval);
+  // }, []);
 
   return (
     <div className="space-y-8">

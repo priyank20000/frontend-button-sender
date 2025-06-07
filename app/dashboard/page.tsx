@@ -6,12 +6,16 @@ import { Button } from "@/components/ui/button";
 import {
   MessageSquare,
   CheckCircle2,
-  Phone,
+  Smartphone,
   ArrowUpRight,
   ArrowDownRight,
   Plus,
   Send,
-  FileDown,
+  Loader2,
+  FileText,
+  TrendingUp,
+  Users,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -22,24 +26,16 @@ import {
   LinearScale,
   PointElement,
   LineElement,
-  ArcElement,
   Title,
   Tooltip,
   Legend,
 } from "chart.js";
 import { useRouter } from "next/navigation";
-import { Toaster, toast } from "react-hot-toast";
-import { Loader2 } from "lucide-react";
+import { toast } from "react-hot-toast";
 
 // Register Chart.js components
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ArcElement, Title, Tooltip, Legend);
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend);
 
-interface TemplateStats {
-  _id: string;
-  name: string;
-  messagesSent: number;
-  successRate: number;
-}
 
 interface Analytics {
   totalMessages: number;
@@ -49,11 +45,6 @@ interface Analytics {
   connectedInstances: number;
   disconnectedInstances: number;
   totalTemplates: number;
-  recentActivity: Array<{
-    type: "message" | "template" | "connection";
-    count?: number;
-    time: string;
-  }>;
   chatStats: {
     dailyMessages: Array<{ date: string; count: number }>;
     messageTypes: {
@@ -62,7 +53,6 @@ interface Analytics {
       documents: number;
     };
   };
-  topTemplates: TemplateStats[];
 }
 
 export default function DashboardPage() {
@@ -74,7 +64,6 @@ export default function DashboardPage() {
     connectedInstances: 0,
     disconnectedInstances: 0,
     totalTemplates: 0,
-    recentActivity: [],
     chatStats: {
       dailyMessages: [],
       messageTypes: {
@@ -83,28 +72,20 @@ export default function DashboardPage() {
         documents: 0,
       },
     },
-    topTemplates: [],
   });
   const [isLoading, setIsLoading] = useState(true);
-  const [timeRange, setTimeRange] = useState("7d");
   const [token, setToken] = useState<string | null>(null);
   const router = useRouter();
 
-  // Dummy data for demonstration (replace with API data)
-  const dummyAnalytics: Analytics = {
+  // Dummy data for chart demonstration
+  const dummyChartData: Analytics = {
     totalMessages: 12500,
     successRate: 10,
     messageGrowth: 12.3,
-    totalInstances: 10,
-    connectedInstances: 8,
-    disconnectedInstances: 2,
-    totalTemplates: 15,
-    recentActivity: [
-      { type: "message", count: 150, time: "2025-06-06 15:30" },
-      { type: "template", count: 1, time: "2025-06-06 14:00" },
-      { type: "connection", time: "2025-06-06 13:45" },
-      { type: "message", count: 300, time: "2025-06-06 12:15" },
-    ],
+    totalInstances: 0,
+    connectedInstances: 0,
+    disconnectedInstances: 0,
+    totalTemplates: 0,
     chatStats: {
       dailyMessages: [
         { date: "2025-06-01", count: 800 },
@@ -120,16 +101,10 @@ export default function DashboardPage() {
         documents: 500,
       },
     },
-    topTemplates: [
-      { _id: "1", name: "Welcome Message", messagesSent: 3000, successRate: 99.2 },
-      { _id: "2", name: "Promo Offer", messagesSent: 2500, successRate: 97.8 },
-      { _id: "3", name: "Follow-Up", messagesSent: 2000, successRate: 98.5 },
-    ],
   };
 
   // Get token from cookies or localStorage
   const getToken = (): string | null => {
-    // Check cookies first
     const cookieToken = document.cookie
       .split('; ')
       .find(row => row.startsWith('token='))
@@ -139,7 +114,6 @@ export default function DashboardPage() {
       return cookieToken;
     }
 
-    // Check localStorage
     const localToken = localStorage.getItem('token');
     if (localToken) {
       return localToken;
@@ -150,18 +124,45 @@ export default function DashboardPage() {
 
   // Handle unauthorized access
   const handleUnauthorized = () => {
-    // Clear tokens
     document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
     localStorage.removeItem('token');
     document.cookie = 'user=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
     localStorage.removeItem('user');
-
-    // Redirect to login
+    
     router.push('/login');
   };
 
+  const fetchStatistics = async (authToken: string) => {
+    try {
+      const response = await fetch('https://whatsapp.recuperafly.com/api/user/statistics', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.status === 401) {
+        toast.error('Authentication failed. Please log in again.');
+        handleUnauthorized();
+        return null;
+      }
+
+      const data = await response.json();
+      if (data.status && data.statistics) {
+        return data.statistics;
+      } else {
+        toast.error(data.message || 'Failed to fetch statistics');
+        return null;
+      }
+    } catch (error) {
+      console.error('Error fetching statistics:', error);
+      toast.error('Error fetching statistics');
+      return null;
+    }
+  };
+
   useEffect(() => {
-    // Initialize token
     const authToken = getToken();
     setToken(authToken);
 
@@ -171,43 +172,38 @@ export default function DashboardPage() {
       return;
     }
 
-    const fetchAnalytics = async () => {
+    const fetchData = async () => {
       setIsLoading(true);
       try {
-        const response = await fetch(`https://bulkwhasapp-backend.onrender.com/api/analytics?timeRange=${timeRange}`, {
-          method: "GET",
-          headers: {
-            Authorization: `Bearer ${authToken}`,
-            "Content-Type": "application/json",
-          },
-        });
-
-        if (response.status === 401) {
-          toast.error('Authentication failed. Please log in again.');
-          handleUnauthorized();
-          return;
-        }
-
-        const data = await response.json();
-        if (data.status) {
-          setAnalytics(data.data);
+        const statistics = await fetchStatistics(authToken);
+        
+        if (statistics) {
+          setAnalytics({
+            ...dummyChartData,
+            totalInstances: statistics.totalInstances,
+            connectedInstances: statistics.connectedInstances,
+            disconnectedInstances: statistics.disconnectedInstances,
+            totalMessages: statistics.totalMessages,
+            totalTemplates: statistics.totalTemplates,
+            successRate: statistics.connectedInstances,
+          });
         } else {
-          setAnalytics(dummyAnalytics);
-          toast.error(data.message || "Failed to fetch analytics, using sample data");
+          setAnalytics(dummyChartData);
         }
       } catch (error) {
-        setAnalytics(dummyAnalytics);
-        toast.error("Error fetching analytics, using sample data");
-        console.error("Error fetching analytics:", error);
+        console.error('Error in fetchData:', error);
+        setAnalytics(dummyChartData);
+        toast.error('Using sample data due to connection issues');
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchAnalytics();
-    const interval = setInterval(fetchAnalytics, 5 * 60 * 1000); // Refresh every 5 minutes
+    fetchData();
+    
+    const interval = setInterval(fetchData, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [timeRange, router]);
+  }, [router]);
 
   // Line chart data for daily messages
   const lineChartData = {
@@ -236,36 +232,8 @@ export default function DashboardPage() {
     },
   };
 
-  // Pie chart data for message types
-  const pieChartData = {
-    labels: ["Text", "Media", "Documents"],
-    datasets: [
-      {
-        data: [
-          analytics.chatStats.messageTypes.text,
-          analytics.chatStats.messageTypes.media,
-          analytics.chatStats.messageTypes.documents,
-        ],
-        backgroundColor: ["#3b82f6", "#10b981", "#f59e0b"],
-        borderColor: ["#1e40af", "#047857", "#b45309"],
-        borderWidth: 1,
-      },
-    ],
-  };
-
   return (
     <div className="space-y-8 p-6 max-w-7xl mx-auto bg-zinc-950 min-h-screen">
-      <Toaster
-        position="top-right"
-        toastOptions={{
-          duration: 3000,
-          style: {
-            background: "#18181b",
-            color: "#fff",
-            borderRadius: "8px",
-          },
-        }}
-      />
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-zinc-200">Dashboard Overview</h1>
@@ -276,7 +244,7 @@ export default function DashboardPage() {
       {isLoading ? (
         <div className="flex items-center justify-center h-64">
           <div className="flex flex-col items-center">
-            <Loader2 className="h-12 w-12 text-blue-500 animate-spin mb-4" />
+            <Loader2 className="h-12 w-12 text-zinc-500 animate-spin mb-4" />
             <p className="text-zinc-400">Loading dashboard...</p>
           </div>
         </div>
@@ -284,13 +252,14 @@ export default function DashboardPage() {
         <>
           {/* Stats Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {/* Total Messages Card */}
             <Card className="p-6 bg-black border-zinc-800">
               <div className="flex items-center justify-between mb-4">
                 <div className="p-2 bg-blue-500/10 rounded-lg">
                   <MessageSquare className="h-6 w-6 text-blue-500" />
                 </div>
                 <div className={cn("flex items-center", analytics.messageGrowth >= 0 ? "text-green-500" : "text-red-500")}>
-                  {analytics.messageGrowth >= 0 ? <ArrowUpRight className="h-4 w-4 mr-1" /> : <ArrowDownRight className="h-4 w-4 mr-1" />}
+                  {analytics.messageGrowth >= 0 ? <TrendingUp className="h-4 w-4 mr-1" /> : <ArrowDownRight className="h-4 w-4 mr-1" />}
                   {Math.abs(analytics.messageGrowth)}%
                 </div>
               </div>
@@ -301,41 +270,49 @@ export default function DashboardPage() {
               </div>
             </Card>
 
+            {/* Connected Instances Card */}
             <Card className="p-6 bg-black border-zinc-800">
               <div className="flex items-center justify-between mb-4">
                 <div className="p-2 bg-green-500/10 rounded-lg">
                   <CheckCircle2 className="h-6 w-6 text-green-500" />
                 </div>
+                <div className="flex items-center text-green-500">
+                  <Activity className="h-4 w-4 mr-1" />
+                  <span className="text-xs">Active</span>
+                </div>
               </div>
-              <h3 className="text-zinc-400 text-sm">Total Instance Connected</h3>
+              <h3 className="text-zinc-400 text-sm">Connected Instances</h3>
               <div className="flex items-end gap-2 mt-2">
-                <span className="text-3xl font-bold text-zinc-200">{analytics.successRate}</span>
+                <span className="text-3xl font-bold text-zinc-200">{analytics.connectedInstances}</span>
+                <span className="text-zinc-500 text-sm mb-1">of {analytics.totalInstances}</span>
               </div>
             </Card>
 
+            {/* Total Instances Card */}
             <Card className="p-6 bg-black border-zinc-800">
               <div className="flex items-center justify-between mb-4">
                 <div className="p-2 bg-emerald-500/10 rounded-lg">
-                  <Phone className="h-6 w-6 text-emerald-500" />
+                  <Smartphone className="h-6 w-6 text-emerald-500" />
                 </div>
-                <Button variant="link" className="text-zinc-400 hover:text-zinc-200" asChild>
-                  <Link href="/devices">Manage</Link>
+                <Button variant="link" className="text-zinc-400 hover:text-zinc-200 text-xs p-0" asChild>
+                  <Link href="/dashboard/connection">Manage</Link>
                 </Button>
               </div>
               <h3 className="text-zinc-400 text-sm">Total Instances</h3>
               <div className="flex items-end gap-2 mt-2">
                 <span className="text-3xl font-bold text-zinc-200">{analytics.totalInstances}</span>
-                <span className="text-zinc-500 text-sm mb-1">instances</span>
+                <span className="text-zinc-500 text-sm mb-1">devices</span>
               </div>
             </Card>
 
+            {/* Total Templates Card */}
             <Card className="p-6 bg-black border-zinc-800">
               <div className="flex items-center justify-between mb-4">
                 <div className="p-2 bg-purple-500/10 rounded-lg">
-                  <MessageSquare className="h-6 w-6 text-purple-500" />
+                  <FileText className="h-6 w-6 text-purple-500" />
                 </div>
-                <Button variant="link" className="text-zinc-400 hover:text-zinc-200" asChild>
-                  <Link href="/templates">Manage</Link>
+                <Button variant="link" className="text-zinc-400 hover:text-zinc-200 text-xs p-0" asChild>
+                  <Link href="/dashboard/templates">Manage</Link>
                 </Button>
               </div>
               <h3 className="text-zinc-400 text-sm">Total Templates</h3>
@@ -355,7 +332,10 @@ export default function DashboardPage() {
               {/* Message Trend Chart */}
               <Card className="bg-black border-zinc-800">
                 <CardHeader>
-                  <CardTitle className="text-zinc-200 text-lg">Message Activity</CardTitle>
+                  <CardTitle className="text-zinc-200 text-lg flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5" />
+                    Message Activity
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="h-[300px]">
@@ -369,34 +349,37 @@ export default function DashboardPage() {
               {/* Quick Actions */}
               <Card className="bg-black border-zinc-800">
                 <CardHeader>
-                  <CardTitle className="text-zinc-200 text-lg">Quick Actions</CardTitle>
+                  <CardTitle className="text-zinc-200 text-lg flex items-center gap-2">
+                    <Users className="h-5 w-5" />
+                    Quick Actions
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-col gap-4">
                     <Button
                       asChild
-                      className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 justify-start"
+                      className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 justify-start h-12"
                     >
-                      <Link href="/templates">
-                        <Plus className="h-5 w-5 mr-2" />
+                      <Link href="/dashboard/templates">
+                        <FileText className="h-5 w-5 mr-2" />
                         Create Template
                       </Link>
                     </Button>
                     <Button
                       asChild
-                      className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 justify-start"
+                      className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 justify-start h-12"
                     >
-                      <Link href="/messages">
+                      <Link href="/dashboard/messaging">
                         <Send className="h-5 w-5 mr-2" />
                         Send Message
                       </Link>
                     </Button>
                     <Button
                       asChild
-                      className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 justify-start"
+                      className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 justify-start h-12"
                     >
-                      <Link href="/devices">
-                        <Phone className="h-5 w-5 mr-2" />
+                      <Link href="/dashboard/connection">
+                        <Smartphone className="h-5 w-5 mr-2" />
                         Add Device
                       </Link>
                     </Button>

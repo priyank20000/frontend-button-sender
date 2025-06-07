@@ -52,6 +52,20 @@ import { useRouter } from 'next/navigation';
 import { Toaster, toast } from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 
+// Ant Design imports
+import { 
+  Table as AntTable, 
+  Button as AntButton, 
+  Modal, 
+  Form, 
+  Input as AntInput, 
+  Space, 
+  Popconfirm, 
+  message as antMessage,
+  ConfigProvider
+} from 'antd';
+import { PlusOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+
 interface Template {
   _id?: string;
   name: string;
@@ -85,6 +99,24 @@ interface Recipient {
   name: string;
   variables: { [key: string]: string };
 }
+
+interface AntdContact {
+  key: string;
+  sn: number;
+  name: string;
+  number: string;
+  var1: string;
+  var2: string;
+  var3: string;
+  var4: string;
+  var5: string;
+  var6: string;
+  var7: string;
+  var8: string;
+  var9: string;
+  var10: string;
+}
+
 interface Campaign {
   _id: string;
   name: string;
@@ -178,6 +210,22 @@ export default function MessagingPage() {
   const [templatesPerPage] = useState(5);
   const [totalTemplates, setTotalTemplates] = useState(0);
   
+  // Template selection state for case 3
+  const [showTemplateSelection, setShowTemplateSelection] = useState(false);
+  const [case3TemplateSearchValue, setCase3TemplateSearchValue] = useState('');
+  const [case3TemplateCurrentPage, setCase3TemplateCurrentPage] = useState(1);
+  const [case3TemplatesPerPage] = useState(5);
+  const [case3TotalTemplates, setCase3TotalTemplates] = useState(0);
+  const [case3Templates, setCase3Templates] = useState<Template[]>([]);
+  const [editingTemplateName, setEditingTemplateName] = useState<string | null>(null);
+  const [editingTemplateValue, setEditingTemplateValue] = useState('');
+  
+  // Ant Design Contact Manager State
+  const [antdContacts, setAntdContacts] = useState<AntdContact[]>([]);
+  const [isContactModalVisible, setIsContactModalVisible] = useState(false);
+  const [editingContact, setEditingContact] = useState<AntdContact | null>(null);
+  const [contactForm] = Form.useForm();
+  
   const editorRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
@@ -201,6 +249,132 @@ export default function MessagingPage() {
     var9: '',
     var10: ''
   });
+
+  // Ant Design Table Columns
+  const antdColumns = [
+    {
+      title: 'SN',
+      dataIndex: 'sn',
+      key: 'sn',
+      width: 60,
+      align: 'center' as const,
+    },
+    {
+      title: 'Name',
+      dataIndex: 'name',
+      key: 'name',
+      width: 150,
+    },
+    {
+      title: 'Number',
+      dataIndex: 'number',
+      key: 'number',
+      width: 150,
+    },
+    {
+      title: 'Variable 1',
+      dataIndex: 'var1',
+      key: 'var1',
+      width: 120,
+      render: (text: string) => text || 'Enter Here',
+    },
+    {
+      title: 'Variable 2',
+      dataIndex: 'var2',
+      key: 'var2',
+      width: 120,
+      render: (text: string) => text || 'Enter Here',
+    },
+    {
+      title: 'Variable 3',
+      dataIndex: 'var3',
+      key: 'var3',
+      width: 120,
+      render: (text: string) => text || 'Enter Here',
+    },
+    {
+      title: 'Variable 4',
+      dataIndex: 'var4',
+      key: 'var4',
+      width: 120,
+      render: (text: string) => text || 'Enter Here',
+    },
+    {
+      title: 'Variable 5',
+      dataIndex: 'var5',
+      key: 'var5',
+      width: 120,
+      render: (text: string) => text || 'Enter Here',
+    },
+    {
+      title: 'Variable 6',
+      dataIndex: 'var6',
+      key: 'var6',
+      width: 120,
+      render: (text: string) => text || 'Enter Here',
+    },
+    {
+      title: 'Variable 7',
+      dataIndex: 'var7',
+      key: 'var7',
+      width: 120,
+      render: (text: string) => text || 'Enter Here',
+    },
+    {
+      title: 'Variable 8',
+      dataIndex: 'var8',
+      key: 'var8',
+      width: 120,
+      render: (text: string) => text || 'Enter Here',
+    },
+    {
+      title: 'Variable 9',
+      dataIndex: 'var9',
+      key: 'var9',
+      width: 120,
+      render: (text: string) => text || 'Enter Here',
+    },
+    {
+      title: 'Variable 10',
+      dataIndex: 'var10',
+      key: 'var10',
+      width: 120,
+      render: (text: string) => text || 'Enter Here',
+    },
+    {
+      title: 'Action',
+      key: 'action',
+      width: 120,
+      fixed: 'right' as const,
+      render: (_: any, record: AntdContact) => (
+        <Space size="small">
+          <AntButton
+            type="link"
+            icon={<EditOutlined />}
+            onClick={() => handleContactEdit(record)}
+            size="small"
+          >
+            Edit
+          </AntButton>
+          <Popconfirm
+            title="Are you sure you want to delete this contact?"
+            onConfirm={() => handleContactDelete(record.key)}
+            okText="Yes"
+            cancelText="No"
+          >
+            <AntButton
+              type="link"
+              danger
+              icon={<DeleteOutlined />}
+              size="small"
+            >
+              Delete
+            </AntButton>
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ];
 
   // Enhanced toast system matching connection page
   const showToast = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'success') => {
@@ -274,6 +448,121 @@ export default function MessagingPage() {
     Cookies.remove('user', { path: '/', secure: window.location.protocol === 'https:', sameSite: 'Lax' });
     localStorage.removeItem('user');
     router.push('/login');
+  };
+
+  // Ant Design Contact Manager Functions
+  const handleContactAdd = () => {
+    setEditingContact(null);
+    contactForm.resetFields();
+    setIsContactModalVisible(true);
+  };
+
+  const handleContactEdit = (contact: AntdContact) => {
+    setEditingContact(contact);
+    contactForm.setFieldsValue(contact);
+    setIsContactModalVisible(true);
+  };
+
+  const handleContactDelete = (key: string) => {
+    setAntdContacts(antdContacts.filter(contact => contact.key !== key));
+    antMessage.success('Contact deleted successfully');
+    
+    // Update recipients state to sync with antd contacts
+    const updatedRecipients = antdContacts
+      .filter(contact => contact.key !== key)
+      .map(contact => ({
+        phone: contact.number,
+        name: contact.name,
+        variables: {
+          var1: contact.var1,
+          var2: contact.var2,
+          var3: contact.var3,
+          var4: contact.var4,
+          var5: contact.var5,
+          var6: contact.var6,
+          var7: contact.var7,
+          var8: contact.var8,
+          var9: contact.var9,
+          var10: contact.var10,
+        }
+      }));
+    setRecipients(updatedRecipients);
+  };
+
+  const handleContactSubmit = async () => {
+    try {
+      const values = await contactForm.validateFields();
+      
+      if (editingContact) {
+        // Update existing contact
+        const updatedContacts = antdContacts.map(contact => 
+          contact.key === editingContact.key 
+            ? { ...values, key: editingContact.key, sn: editingContact.sn }
+            : contact
+        );
+        setAntdContacts(updatedContacts);
+        antMessage.success('Contact updated successfully');
+        
+        // Update recipients state
+        const updatedRecipients = updatedContacts.map(contact => ({
+          phone: contact.number,
+          name: contact.name,
+          variables: {
+            var1: contact.var1 || '',
+            var2: contact.var2 || '',
+            var3: contact.var3 || '',
+            var4: contact.var4 || '',
+            var5: contact.var5 || '',
+            var6: contact.var6 || '',
+            var7: contact.var7 || '',
+            var8: contact.var8 || '',
+            var9: contact.var9 || '',
+            var10: contact.var10 || '',
+          }
+        }));
+        setRecipients(updatedRecipients);
+      } else {
+        // Add new contact
+        const newContact: AntdContact = {
+          ...values,
+          key: Date.now().toString(),
+          sn: antdContacts.length + 1,
+        };
+        const updatedContacts = [...antdContacts, newContact];
+        setAntdContacts(updatedContacts);
+        antMessage.success('Contact added successfully');
+        
+        // Update recipients state
+        const updatedRecipients = updatedContacts.map(contact => ({
+          phone: contact.number,
+          name: contact.name,
+          variables: {
+            var1: contact.var1 || '',
+            var2: contact.var2 || '',
+            var3: contact.var3 || '',
+            var4: contact.var4 || '',
+            var5: contact.var5 || '',
+            var6: contact.var6 || '',
+            var7: contact.var7 || '',
+            var8: contact.var8 || '',
+            var9: contact.var9 || '',
+            var10: contact.var10 || '',
+          }
+        }));
+        setRecipients(updatedRecipients);
+      }
+      
+      setIsContactModalVisible(false);
+      contactForm.resetFields();
+    } catch (error) {
+      console.error('Validation failed:', error);
+    }
+  };
+
+  const handleContactCancel = () => {
+    setIsContactModalVisible(false);
+    contactForm.resetFields();
+    setEditingContact(null);
   };
 
   // Fetch data
@@ -381,32 +670,48 @@ export default function MessagingPage() {
 
   const handleRemoveDuplicates = () => {
     const seenPhones = new Set<string>();
-    const uniqueRecipients = recipients.filter((recipient) => {
-      if (!recipient.phone) return false; // Skip recipients with empty phone numbers
-      if (seenPhones.has(recipient.phone)) return false;
-      seenPhones.add(recipient.phone);
+    const uniqueContacts = antdContacts.filter((contact) => {
+      if (!contact.number) return false;
+      if (seenPhones.has(contact.number)) return false;
+      seenPhones.add(contact.number);
       return true;
     });
   
-    if (uniqueRecipients.length === recipients.length) {
-      showToast('No duplicate phone numbers found.', 'info');
+    if (uniqueContacts.length === antdContacts.length) {
+      antMessage.info('No duplicate phone numbers found.');
     } else {
-      setRecipients(uniqueRecipients.length > 0 ? uniqueRecipients : [{
-        phone: '',
-        name: '',
-        variables: { var1: '', var2: '', var3: '', var4: '', var5: '', var6: '', var7: '', var8: '', var9: '', var10: '' }
-      }]);
-      showToast(`Removed ${recipients.length - uniqueRecipients.length} duplicate recipients.`, 'success');
+      setAntdContacts(uniqueContacts);
+      antMessage.success(`Removed ${antdContacts.length - uniqueContacts.length} duplicate contacts.`);
+      
+      // Update recipients state
+      const updatedRecipients = uniqueContacts.map(contact => ({
+        phone: contact.number,
+        name: contact.name,
+        variables: {
+          var1: contact.var1 || '',
+          var2: contact.var2 || '',
+          var3: contact.var3 || '',
+          var4: contact.var4 || '',
+          var5: contact.var5 || '',
+          var6: contact.var6 || '',
+          var7: contact.var7 || '',
+          var8: contact.var8 || '',
+          var9: contact.var9 || '',
+          var10: contact.var10 || '',
+        }
+      }));
+      setRecipients(updatedRecipients);
     }
   };
   
   const handleDeleteAll = () => {
+    setAntdContacts([]);
     setRecipients([{
       phone: '',
       name: '',
       variables: { var1: '', var2: '', var3: '', var4: '', var5: '', var6: '', var7: '', var8: '', var9: '', var10: '' }
     }]);
-    showToast('All recipients deleted.', 'success');
+    antMessage.success('All contacts deleted.');
   };
 
   const handleDeleteCampaign = async (campaignId: string) => {
@@ -628,6 +933,46 @@ export default function MessagingPage() {
       </DialogContent>
     </Dialog>
   );
+
+  // Fetch templates with pagination for case 3
+  const fetchCase3Templates = useCallback(async () => {
+    const token = await getToken();
+    if (!token) {
+      router.push('/login');
+      return;
+    }
+
+    try {
+      const response = await fetch('https://whatsapp.recuperafly.com/api/template/all', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          page: case3TemplateCurrentPage, 
+          limit: case3TemplatesPerPage,
+          search: case3TemplateSearchValue 
+        }),
+      });
+      
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+
+      const templateData = await response.json();
+      if (templateData.status) {
+        setCase3Templates(templateData.templates || []);
+        setCase3TotalTemplates(templateData.total || 0);
+      } else {
+        showToast(templateData.message || 'Failed to fetch templates', 'error');
+      }
+    } catch (err) {
+      showToast('Error fetching templates: ' + (err instanceof Error ? err.message : 'Unknown error'), 'error');
+    }
+  }, [router, case3TemplateCurrentPage, case3TemplateSearchValue]);
+
   // Fetch templates with pagination
   const fetchTemplates = useCallback(async () => {
     const token = await getToken();
@@ -676,6 +1021,80 @@ export default function MessagingPage() {
       fetchTemplates();
     }
   }, [currentStep, fetchTemplates]);
+
+  useEffect(() => {
+    if (showTemplateSelection) {
+      fetchCase3Templates();
+    }
+  }, [showTemplateSelection, fetchCase3Templates]);
+
+  // Handle template name editing
+  const handleTemplateNameDoubleClick = (templateId: string, currentName: string) => {
+    setEditingTemplateName(templateId);
+    setEditingTemplateValue(currentName);
+  };
+
+  const handleTemplateNameEdit = async (templateId: string) => {
+    if (!editingTemplateValue.trim()) {
+      showToast('Template name cannot be empty', 'error');
+      return;
+    }
+
+    const token = await getToken();
+    if (!token) {
+      showToast('Please log in to edit template', 'error');
+      router.push('/login');
+      return;
+    }
+
+    try {
+      const response = await fetch('https://whatsapp.recuperafly.com/api/template/edit', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          templateId,
+          name: editingTemplateValue,
+        }),
+      });
+
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+
+      const data = await response.json();
+      if (data.status) {
+        // Update the template in case3Templates
+        setCase3Templates(prev => 
+          prev.map(template => 
+            template._id === templateId 
+              ? { ...template, name: editingTemplateValue }
+              : template
+          )
+        );
+        showToast('Template name updated successfully', 'success');
+      } else {
+        showToast(data.message || 'Failed to update template name', 'error');
+      }
+    } catch (err) {
+      showToast('Error updating template name: ' + (err instanceof Error ? err.message : 'Unknown error'), 'error');
+    } finally {
+      setEditingTemplateName(null);
+      setEditingTemplateValue('');
+    }
+  };
+
+  const handleTemplateNameKeyPress = (e: React.KeyboardEvent, templateId: string) => {
+    if (e.key === 'Enter') {
+      handleTemplateNameEdit(templateId);
+    } else if (e.key === 'Escape') {
+      setEditingTemplateName(null);
+      setEditingTemplateValue('');
+    }
+  };
 
   // Handle instance selection for multi-select dropdown
   const handleInstanceSelection = (instanceId: string) => {
@@ -797,21 +1216,47 @@ export default function MessagingPage() {
       return;
     }
 
-    const newRecipients = excelData.map(row => {
-      const variables: { [key: string]: string } = {};
-      for (let i = 1; i <= 10; i++) {
-        const varKey = `var${i}`;
-        const header = columnMappings[varKey];
-        variables[varKey] = header && row[header] ? row[header] : '';
-      }
+    const newContacts = excelData.map((row, index) => {
       return {
-        phone: row[columnMappings.phone] || '',
+        key: (Date.now() + index).toString(),
+        sn: antdContacts.length + index + 1,
         name: row[columnMappings.name] || '',
-        variables
+        number: row[columnMappings.phone] || '',
+        var1: columnMappings.var1 && row[columnMappings.var1] ? row[columnMappings.var1] : '',
+        var2: columnMappings.var2 && row[columnMappings.var2] ? row[columnMappings.var2] : '',
+        var3: columnMappings.var3 && row[columnMappings.var3] ? row[columnMappings.var3] : '',
+        var4: columnMappings.var4 && row[columnMappings.var4] ? row[columnMappings.var4] : '',
+        var5: columnMappings.var5 && row[columnMappings.var5] ? row[columnMappings.var5] : '',
+        var6: columnMappings.var6 && row[columnMappings.var6] ? row[columnMappings.var6] : '',
+        var7: columnMappings.var7 && row[columnMappings.var7] ? row[columnMappings.var7] : '',
+        var8: columnMappings.var8 && row[columnMappings.var8] ? row[columnMappings.var8] : '',
+        var9: columnMappings.var9 && row[columnMappings.var9] ? row[columnMappings.var9] : '',
+        var10: columnMappings.var10 && row[columnMappings.var10] ? row[columnMappings.var10] : '',
       };
-    }).filter(r => r.phone && r.name);
+    }).filter(contact => contact.name && contact.number);
 
-    setRecipients([...recipients, ...newRecipients]);
+    const updatedContacts = [...antdContacts, ...newContacts];
+    setAntdContacts(updatedContacts);
+    
+    // Update recipients state
+    const updatedRecipients = updatedContacts.map(contact => ({
+      phone: contact.number,
+      name: contact.name,
+      variables: {
+        var1: contact.var1,
+        var2: contact.var2,
+        var3: contact.var3,
+        var4: contact.var4,
+        var5: contact.var5,
+        var6: contact.var6,
+        var7: contact.var7,
+        var8: contact.var8,
+        var9: contact.var9,
+        var10: contact.var10,
+      }
+    }));
+    setRecipients(updatedRecipients);
+    
     setImportModalOpen(false);
     setExcelData([]);
     setExcelHeaders([]);
@@ -831,7 +1276,7 @@ export default function MessagingPage() {
       var9: '',
       var10: ''
     });
-    showToast('Recipients imported successfully', 'success');
+    antMessage.success('Contacts imported successfully');
   };
 
   // Navigation functions
@@ -851,8 +1296,8 @@ export default function MessagingPage() {
         return;
       }
     } else if (currentStep === 3) {
-      if (recipients.some((r) => !r.phone || !r.name || r.phone.trim() === '' || r.name.trim() === '')) {
-        showToast('All recipients must have a valid phone number and name', 'error');
+      if (antdContacts.length === 0 || antdContacts.some((contact) => !contact.number || !contact.name)) {
+        showToast('All contacts must have a valid phone number and name', 'error');
         return;
       }
     }
@@ -905,6 +1350,7 @@ export default function MessagingPage() {
       setSelectedTemplate('');
       setSelectedInstances([]);
       setRecipients([{ phone: '', name: '', variables: { var1: '', var2: '', var3: '', var4: '', var5: '', var6: '', var7: '', var8: '', var9: '', var10: '' } }]);
+      setAntdContacts([]);
       setCurrentStep(1);
       setDelayRange({ start: 3, end: 5 });
       
@@ -969,6 +1415,7 @@ const handleSendCampaign = async () => {
     setSelectedTemplate('');
     setSelectedInstances([]);
     setRecipients([{ phone: '', name: '', variables: { var1: '', var2: '', var3: '', var4: '', var5: '', var6: '', var7: '', var8: '', var9: '', var10: '' } }]);
+    setAntdContacts([]);
     setCurrentStep(1);
     setDelayRange({ start: 3, end: 5 });
 
@@ -1007,6 +1454,7 @@ const handleSendCampaign = async () => {
 
   // Template pagination
   const totalTemplatePages = Math.ceil(totalTemplates / templatesPerPage);
+  const case3TotalTemplatePages = Math.ceil(case3TotalTemplates / case3TemplatesPerPage);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -1252,117 +1700,165 @@ const handleSendCampaign = async () => {
 
         case 3:
           return (
-            <div className="space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold text-zinc-200 mb-2">Select Audience</h3>
-                <p className="text-zinc-400 mb-6">Import recipients from Excel or add manually.</p>
-              </div>
-    
-              {/* Import Options */}
-              <div className="flex flex-wrap gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => setImportModalOpen(true)}
-                  className="bg-zinc-800 hover:bg-zinc-700 text-white border-zinc-700"
-                >
-                  <Upload className="h-4 w-4 mr-2" />
-                  Excel Import
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleRemoveDuplicates}
-                  className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
-                >
-                  <Users className="h-4 w-4 mr-2" />
-                  Remove Duplicates
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleDeleteAll}
-                  className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete All
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={addRecipient}
-                  className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Recipient
-                </Button>
-              </div>
-    
-              {/* Recipients Table */}
-              <div className="border border-zinc-800 rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-zinc-800">
-                      <TableHead className="text-zinc-400">SN</TableHead>
-                      <TableHead className="text-zinc-400">Name</TableHead>
-                      <TableHead className="text-zinc-400">Phone</TableHead>
-                      {Array.from({ length: 10 }, (_, i) => (
-                        <TableHead key={i} className="text-zinc-400">Var{i + 1}</TableHead>
-                      ))}
-                      <TableHead className="text-zinc-400">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {recipients.map((recipient, index) => (
-                      <TableRow key={index} className="border-zinc-800">
-                        <TableCell className="text-zinc-200">{index + 1}</TableCell>
-                        <TableCell>
-                          <Input
-                            value={recipient.name}
-                            onChange={(e) => handleRecipientChange(index, 'name', e.target.value)}
-                            placeholder="Enter name"
-                            className="bg-zinc-800 border-zinc-700 text-zinc-200"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            value={recipient.phone}
-                            onChange={(e) => handleRecipientChange(index, 'phone', e.target.value)}
-                            placeholder="Enter phone"
-                            className="bg-zinc-800 border-zinc-700 text-zinc-200"
-                          />
-                        </TableCell>
-                        {Array.from({ length: 10 }, (_, i) => (
-                          <TableCell key={i}>
-                            <Input
-                              value={recipient.variables[`var${i + 1}`]}
-                              onChange={(e) => handleVariableChange(index, `var${i + 1}`, e.target.value)}
-                              placeholder={`Var${i + 1}`}
-                              className="bg-zinc-800 border-zinc-700 text-zinc-200"
-                            />
-                          </TableCell>
-                        ))}
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeRecipient(index)}
-                            className="text-red-400 hover:text-red-300"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-    
-              {/* Summary */}
-              <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-zinc-400">Total: {recipients.length}</span>
-                  <span className="text-zinc-400">Valid: {recipients.filter(r => r.phone && r.name).length}</span>
-                  <span className="text-zinc-400">Invalid: {recipients.filter(r => !r.phone || !r.name).length}</span>
+            <ConfigProvider
+              theme={{
+                token: {
+                  colorPrimary: '#3b82f6',
+                  colorBgContainer: '#27272a',
+                  colorBorder: '#3f3f46',
+                  colorText: '#e4e4e7',
+                  colorTextSecondary: '#a1a1aa',
+                  colorBgElevated: '#18181b',
+                },
+                components: {
+                  Table: {
+                    headerBg: '#18181b',
+                    headerColor: '#a1a1aa',
+                    rowHoverBg: '#3f3f46',
+                  },
+                  Modal: {
+                    contentBg: '#27272a',
+                    headerBg: '#27272a',
+                  },
+                  Input: {
+                    colorBgContainer: '#18181b',
+                    colorBorder: '#3f3f46',
+                    colorText: '#e4e4e7',
+                  },
+                  Button: {
+                    colorBgContainer: '#18181b',
+                    colorBorder: '#3f3f46',
+                    colorText: '#e4e4e7',
+                  },
+                },
+              }}
+            >
+              <div className="space-y-6">
+                <div>
+                  <h3 className="text-lg font-semibold text-zinc-200 mb-2">Select Audience</h3>
+                  <p className="text-zinc-400 mb-6">Import recipients from Excel or add manually.</p>
                 </div>
+      
+                {/* Import Options */}
+                <div className="flex flex-wrap gap-3 mb-6">
+                  <Button
+                    variant="outline"
+                    onClick={() => setImportModalOpen(true)}
+                    className="bg-zinc-800 hover:bg-zinc-700 text-white border-zinc-700"
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Excel Import
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleRemoveDuplicates}
+                    className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
+                  >
+                    <Users className="h-4 w-4 mr-2" />
+                    Remove Duplicates
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleDeleteAll}
+                    className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete All
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleContactAdd}
+                    className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Contact
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowTemplateSelection(true)}
+                    className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    Select Template
+                  </Button>
+                </div>
+      
+                {/* Ant Design Table */}
+                <div className="bg-zinc-900 rounded-lg p-4">
+                  <AntTable
+                    columns={antdColumns}
+                    dataSource={antdContacts}
+                    scroll={{ x: 'max-content' }}
+                    pagination={{
+                      pageSize: 10,
+                      showSizeChanger: true,
+                      showQuickJumper: true,
+                      showTotal: (total, range) =>
+                        `${range[0]}-${range[1]} of ${total} items`,
+                    }}
+                    bordered
+                    size="middle"
+                  />
+                </div>
+      
+                {/* Summary */}
+                <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-zinc-400">Total: {antdContacts.length}</span>
+                    <span className="text-zinc-400">Valid: {antdContacts.filter(c => c.name && c.number).length}</span>
+                    <span className="text-zinc-400">Invalid: {antdContacts.filter(c => !c.name || !c.number).length}</span>
+                  </div>
+                </div>
+      
+                {/* Contact Modal */}
+                <Modal
+                  title={editingContact ? 'Edit Contact' : 'Add New Contact'}
+                  open={isContactModalVisible}
+                  onOk={handleContactSubmit}
+                  onCancel={handleContactCancel}
+                  width={800}
+                  okText={editingContact ? 'Update' : 'Add'}
+                >
+                  <Form
+                    form={contactForm}
+                    layout="vertical"
+                    requiredMark={false}
+                  >
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Form.Item
+                        label="Name"
+                        name="name"
+                        rules={[{ required: true, message: 'Please enter name' }]}
+                      >
+                        <AntInput placeholder="Enter name" />
+                      </Form.Item>
+                      <Form.Item
+                        label="Number"
+                        name="number"
+                        rules={[{ required: true, message: 'Please enter number' }]}
+                      >
+                        <AntInput placeholder="Enter phone number" />
+                      </Form.Item>
+                    </div>
+      
+                    <div className="border-t border-zinc-700 pt-4 mt-4">
+                      <h4 className="text-zinc-200 mb-4">Custom Variables</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {Array.from({ length: 10 }, (_, index) => (
+                          <Form.Item
+                            key={index}
+                            label={`Variable ${index + 1}`}
+                            name={`var${index + 1}`}
+                          >
+                            <AntInput placeholder={`Enter variable ${index + 1}`} />
+                          </Form.Item>
+                        ))}
+                      </div>
+                    </div>
+                  </Form>
+                </Modal>
               </div>
-            </div>
+            </ConfigProvider>
           );
 
       case 4:
@@ -1395,11 +1891,11 @@ const handleSendCampaign = async () => {
                 </div>
                 <div>
                   <Label className="text-zinc-400">Total Recipients</Label>
-                  <p className="text-zinc-200 font-medium">{recipients.length} recipients</p>
+                  <p className="text-zinc-200 font-medium">{antdContacts.length} recipients</p>
                 </div>
                 <div>
                   <Label className="text-zinc-400">Total Messages</Label>
-                  <p className="text-zinc-200 font-medium">{recipients.length * selectedInstances.length} messages</p>
+                  <p className="text-zinc-200 font-medium">{antdContacts.length * selectedInstances.length} messages</p>
                 </div>
               </div>
             </div>
@@ -1738,6 +2234,150 @@ const handleSendCampaign = async () => {
                   <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
               ) : null}
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Template Selection Dialog for Case 3 */}
+        <Dialog open={showTemplateSelection} onOpenChange={setShowTemplateSelection}>
+          <DialogContent className="bg-zinc-900 border-zinc-800 text-zinc-200 max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-xl font-semibold">Select Template</DialogTitle>
+              <DialogDescription className="text-zinc-400">
+                Choose a template for your campaign. Double-click on template name to edit.
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-6 p-6">
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-zinc-400" />
+                <Input
+                  placeholder="Search templates..."
+                  value={case3TemplateSearchValue}
+                  onChange={(e) => setCase3TemplateSearchValue(e.target.value)}
+                  className="pl-10 bg-zinc-800 border-zinc-700 text-zinc-200"
+                />
+              </div>
+
+              {/* Templates Table */}
+              <div className="border border-zinc-800 rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-zinc-800">
+                      <TableHead className="text-zinc-400">SN</TableHead>
+                      <TableHead className="text-zinc-400">Template Name</TableHead>
+                      <TableHead className="text-zinc-400">Type</TableHead>
+                      <TableHead className="text-zinc-400">Created At</TableHead>
+                      <TableHead className="text-zinc-400">Select</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {case3Templates.map((template, index) => (
+                      <TableRow key={template._id} className="border-zinc-800">
+                        <TableCell className="text-zinc-200">
+                          {(case3TemplateCurrentPage - 1) * case3TemplatesPerPage + index + 1}
+                        </TableCell>
+                        <TableCell>
+                          {editingTemplateName === template._id ? (
+                            <Input
+                              value={editingTemplateValue}
+                              onChange={(e) => setEditingTemplateValue(e.target.value)}
+                              onKeyDown={(e) => handleTemplateNameKeyPress(e, template._id!)}
+                              onBlur={() => handleTemplateNameEdit(template._id!)}
+                              className="bg-zinc-800 border-zinc-700 text-zinc-200"
+                              autoFocus
+                            />
+                          ) : (
+                            <span
+                              className="text-zinc-200 cursor-pointer hover:text-zinc-100 transition-colors"
+                              onDoubleClick={() => handleTemplateNameDoubleClick(template._id!, template.name)}
+                            >
+                              {template.name}
+                            </span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-zinc-300">
+                            {template.messageType}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-zinc-400">
+                          {new Date().toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedTemplate === template._id}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedTemplate(template._id!);
+                              } else {
+                                setSelectedTemplate('');
+                              }
+                            }}
+                            className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Pagination */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCase3TemplateCurrentPage(prev => Math.max(prev - 1, 1))}
+                    disabled={case3TemplateCurrentPage === 1}
+                    className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="text-zinc-400 text-sm">
+                    Page {case3TemplateCurrentPage} of {case3TotalTemplatePages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCase3TemplateCurrentPage(prev => Math.min(prev + 1, case3TotalTemplatePages))}
+                    disabled={case3TemplateCurrentPage === case3TotalTemplatePages}
+                    className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-zinc-400 text-sm">{case3TemplatesPerPage} / page</span>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowTemplateSelection(false)}
+                  className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (selectedTemplate) {
+                      setShowTemplateSelection(false);
+                      showToast('Template selected successfully', 'success');
+                    } else {
+                      showToast('Please select a template', 'error');
+                    }
+                  }}
+                  className="bg-zinc-800 hover:bg-zinc-700 text-white"
+                  disabled={!selectedTemplate}
+                >
+                  Select Template
+                </Button>
+              </div>
             </div>
           </DialogContent>
         </Dialog>

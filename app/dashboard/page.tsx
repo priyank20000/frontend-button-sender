@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect, useState } from "react";
@@ -28,11 +27,9 @@ import {
   Tooltip,
   Legend,
 } from "chart.js";
-import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
 import { Toaster, toast } from "react-hot-toast";
 import { Loader2 } from "lucide-react";
-
 
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, ArcElement, Title, Tooltip, Legend);
@@ -90,6 +87,7 @@ export default function DashboardPage() {
   });
   const [isLoading, setIsLoading] = useState(true);
   const [timeRange, setTimeRange] = useState("7d");
+  const [token, setToken] = useState<string | null>(null);
   const router = useRouter();
 
   // Dummy data for demonstration (replace with API data)
@@ -129,23 +127,67 @@ export default function DashboardPage() {
     ],
   };
 
-  useEffect(() => {
-    const fetchAnalytics = async () => {
-      const token = Cookies.get("token");
-      if (!token) {
-        router.push("/login");
-        return;
-      }
+  // Get token from cookies or localStorage
+  const getToken = (): string | null => {
+    // Check cookies first
+    const cookieToken = document.cookie
+      .split('; ')
+      .find(row => row.startsWith('token='))
+      ?.split('=')[1];
 
+    if (cookieToken) {
+      return cookieToken;
+    }
+
+    // Check localStorage
+    const localToken = localStorage.getItem('token');
+    if (localToken) {
+      return localToken;
+    }
+
+    return null;
+  };
+
+  // Handle unauthorized access
+  const handleUnauthorized = () => {
+    // Clear tokens
+    document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    localStorage.removeItem('token');
+    document.cookie = 'user=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+    localStorage.removeItem('user');
+
+    // Redirect to login
+    router.push('/login');
+  };
+
+  useEffect(() => {
+    // Initialize token
+    const authToken = getToken();
+    setToken(authToken);
+
+    if (!authToken) {
+      toast.error('Please log in to access the dashboard');
+      handleUnauthorized();
+      return;
+    }
+
+    const fetchAnalytics = async () => {
       setIsLoading(true);
       try {
         const response = await fetch(`https://bulkwhasapp-backend.onrender.com/api/analytics?timeRange=${timeRange}`, {
           method: "GET",
           headers: {
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${authToken}`,
             "Content-Type": "application/json",
           },
         });
+
+        if (response.status === 401) {
+          toast.error('Authentication failed. Please log in again.');
+          handleUnauthorized();
+          return;
+        }
+
         const data = await response.json();
         if (data.status) {
           setAnalytics(data.data);
@@ -165,7 +207,7 @@ export default function DashboardPage() {
     fetchAnalytics();
     const interval = setInterval(fetchAnalytics, 5 * 60 * 1000); // Refresh every 5 minutes
     return () => clearInterval(interval);
-  }, [router, timeRange]);
+  }, [timeRange, router]);
 
   // Line chart data for daily messages
   const lineChartData = {
@@ -210,10 +252,6 @@ export default function DashboardPage() {
       },
     ],
   };
-
- 
-
- 
 
   return (
     <div className="space-y-8 p-6 max-w-7xl mx-auto bg-zinc-950 min-h-screen">
@@ -325,13 +363,9 @@ export default function DashboardPage() {
                   </div>
                 </CardContent>
               </Card>
-
-           
-
             </div>
 
             <div className="space-y-6">
-
               {/* Quick Actions */}
               <Card className="bg-black border-zinc-800">
                 <CardHeader>

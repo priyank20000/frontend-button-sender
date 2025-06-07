@@ -27,7 +27,7 @@ interface Template {
 
 interface Button {
   name: string;
-  type: 'REPLY' | 'URL' | 'PHONE_NUMBER' | 'UNSUBSCRIBE';
+  type: 'REPLY' | 'URL' ;
   url?: string;
   title?: string;
 }
@@ -216,7 +216,7 @@ export default function Templates() {
       setButtons(
         template.template.button?.map(btn => ({
           name: btn.name || btn.title || '',
-          type: btn.type as 'REPLY' | 'URL' | 'PHONE_NUMBER' | 'UNSUBSCRIBE',
+          type: btn.type as 'REPLY' | 'URL' ,
           url: btn.url,
         })) || [{ name: '', type: 'REPLY' }]
       );
@@ -501,7 +501,7 @@ export default function Templates() {
     if (!selection || !selection.rangeCount) return;
 
     const range = selection.getRangeAt(0);
-    const placeholder = value === 'name' ? '{{name}}' : value === 'number' ? '{{number}}' : `{{var${value.split(' ')[1]}}}`;
+    const placeholder = value === 'name' ? '{{name}}' : value === 'phone' ? '{{phone}}' : `{{var${value.split(' ')[1]}}}`;
     range.insertNode(document.createTextNode(placeholder));
     range.collapse(false);
     selection.removeAllRanges();
@@ -810,7 +810,7 @@ export default function Templates() {
                       >
                         <option value="" disabled>Insert variable</option>
                         <option value="name">Name</option>
-                        <option value="number">Number</option>
+                        <option value="phone">Phone</option>
                         {Array.from({ length: 10 }, (_, i) => (
                           <option key={i} value={`variable ${i + 1}`}>
                             Variable {i + 1}
@@ -928,8 +928,6 @@ export default function Templates() {
                             >
                               <option value="REPLY">Quick Reply</option>
                               <option value="URL">URL</option>
-                              <option value="PHONE_NUMBER">Phone Number</option>
-                              <option value="UNSUBSCRIBE">Unsubscribe</option>
                             </select>
                           </div>
                         </div>

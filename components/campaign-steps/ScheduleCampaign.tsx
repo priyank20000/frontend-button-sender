@@ -2,8 +2,6 @@
 
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Button } from "@/components/ui/button";
-import { Send, Loader2 } from 'lucide-react';
 
 interface ScheduleCampaignProps {
   campaignName: string;
@@ -32,7 +30,7 @@ export default function ScheduleCampaign({
     <div className="space-y-6">
       <div>
         <h3 className="text-lg font-semibold text-zinc-200 mb-2">Schedule Campaign</h3>
-        <p className="text-zinc-400 mb-6">Review your campaign details and configure sending options.</p>
+        <p className="text-zinc-400 mb-6">Configure delay settings for your campaign.</p>
       </div>
 
       {/* Campaign Summary */}
@@ -94,27 +92,6 @@ export default function ScheduleCampaign({
         <p className="text-zinc-400 text-sm mt-2">
           Messages will be sent with a random delay between {delayRange.start} and {delayRange.end} seconds.
         </p>
-      </div>
-
-      {/* Send Options */}
-      <div className="flex gap-4">
-        <Button
-          onClick={onSendCampaign}
-          disabled={isSending}
-          className="bg-zinc-800 hover:bg-zinc-700 text-white"
-        >
-          {isSending ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              Sending...
-            </>
-          ) : (
-            <>
-              <Send className="h-4 w-4 mr-2" />
-              Send Messages
-            </>
-          )}
-        </Button>
       </div>
     </div>
   );

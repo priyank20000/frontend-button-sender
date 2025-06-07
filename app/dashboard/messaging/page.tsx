@@ -13,7 +13,6 @@ import CampaignFilters from '../../../components/CampaignFilters';
 import CampaignTable from '../../../components/CampaignTable';
 import CampaignDetailsDialog from '../../../components/CampaignDetailsDialog';
 import CreateCampaignDialog from '../../../components/CreateCampaignDialog';
-import SendResponsesDialog from '../../../components/SendResponsesDialog';
 import ToastContainer from '../../../components/ToastContainer';
 
 // Types
@@ -62,12 +61,6 @@ interface Campaign {
   delayRange: { start: number; end: number };
 }
 
-interface SendResponse {
-  phone: string;
-  status: boolean;
-  message: string;
-  instanceId: string;
-}
 
 interface CampaignStats {
   total: number;
@@ -96,7 +89,6 @@ export default function MessagingPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [responseDialogOpen, setResponseDialogOpen] = useState(false);
-  const [sendResponses, setSendResponses] = useState<SendResponse[]>([]);
   const [campaignName, setCampaignName] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [campaignsPerPage] = useState(10);
@@ -348,7 +340,6 @@ export default function MessagingPage() {
         throw new Error(result.message || 'Failed to send campaign');
       }
 
-      setSendResponses(result.responses || []);
       setResponseDialogOpen(true);
       showToast('Campaign sent successfully!', 'success');
       setShowCreateCampaign(false);
@@ -553,11 +544,7 @@ export default function MessagingPage() {
           campaign={selectedCampaign}
         />
 
-        <SendResponsesDialog
-          open={responseDialogOpen}
-          onOpenChange={setResponseDialogOpen}
-          responses={sendResponses}
-        />
+     
       </div>
     </div>
   );

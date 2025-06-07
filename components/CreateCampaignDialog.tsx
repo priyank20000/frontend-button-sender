@@ -8,6 +8,7 @@ import BasicConfiguration from './campaign-steps/BasicConfiguration';
 import ChooseTemplate from './campaign-steps/ChooseTemplate';
 import SelectAudience from './campaign-steps/SelectAudience';
 import ScheduleCampaign from './campaign-steps/ScheduleCampaign';
+import FinalStep from './campaign-steps/FinalStep';
 
 interface CreateCampaignDialogProps {
   open: boolean;
@@ -38,7 +39,8 @@ const CAMPAIGN_STEPS = [
   { id: 1, title: 'Basic Configuration', description: 'Enter the Campaign Name and Select Instance Details.' },
   { id: 2, title: 'Choose Template', description: 'Choose from a list of pre-approved templates or create a new template.' },
   { id: 3, title: 'Select Audience', description: 'Import recipients from Excel or add manually.' },
-  { id: 4, title: 'Schedule Campaign', description: 'Configure delay settings and send messages.' }
+  { id: 4, title: 'Schedule Campaign', description: 'Configure delay settings and send messages.' },
+  { id: 5, title: 'Final', description: 'Review and send your campaign to all selected numbers.' }
 ];
 
 export default function CreateCampaignDialog({
@@ -88,7 +90,7 @@ export default function CreateCampaignDialog({
       }
     }
     
-    if (currentStep < 4) {
+    if (currentStep < 5) {
       setCurrentStep(currentStep + 1);
     }
   };
@@ -143,6 +145,22 @@ export default function CreateCampaignDialog({
             isSending={isSending}
           />
         );
+      case 5:
+        return (
+          <FinalStep
+            campaignName={campaignName}
+            selectedTemplate={selectedTemplate}
+            selectedInstances={selectedInstances}
+            antdContacts={antdContacts}
+            delayRange={delayRange}
+            templates={templates}
+            instances={instances}
+            onSendCampaign={onSendCampaign}
+            isSending={isSending}
+            onClose={() => onOpenChange(false)}
+            onBack={handleBack}
+          />
+        );
       default:
         return null;
     }
@@ -195,18 +213,18 @@ export default function CreateCampaignDialog({
         </div>
 
         {/* Navigation Buttons */}
-        <div className="flex justify-between items-center pt-6 border-t border-zinc-800">
-          <Button
-            variant="outline"
-            onClick={handleBack}
-            disabled={currentStep === 1}
-            className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
-          
-          {currentStep < 4 ? (
+        {currentStep < 5 && (
+          <div className="flex justify-between items-center pt-6 border-t border-zinc-800">
+            <Button
+              variant="outline"
+              onClick={handleBack}
+              disabled={currentStep === 1}
+              className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back
+            </Button>
+            
             <Button
               onClick={handleNext}
               className="bg-zinc-800 hover:bg-zinc-700 text-white"
@@ -214,8 +232,8 @@ export default function CreateCampaignDialog({
               Next
               <ArrowRight className="h-4 w-4 ml-2" />
             </Button>
-          ) : null}
-        </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

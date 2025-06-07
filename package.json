@@ -41,6 +41,7 @@
     "@radix-ui/react-tooltip": "^1.1.6",
     "@whiskeysockets/baileys": "github:WhiskeySockets/Baileys",
     "antd": "^5.25.4",
+    "antd-style": "^3.7.1",
     "bcryptjs": "^2.4.3",
     "bufferutil": "^4.0.8",
     "chart.js": "^4.4.9",

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Upload, Users, Trash2, Plus, FileText } from 'lucide-react';
+import { Upload, Users, Trash2, Plus, FileText, Eraser } from 'lucide-react';
 import { ConfigProvider, Table as AntTable, Button as AntButton, Form, message as antMessage } from 'antd';
 import { DeleteOutlined } from '@ant-design/icons';
 import ExcelImportModal from '../ExcelImportModal';
@@ -297,6 +297,45 @@ export default function SelectAudience({
     }
   };
 
+  const handleCleanNumbers = () => {
+    let cleanedCount = 0;
+    const cleanedContacts = antdContacts.map(contact => {
+      if (contact.number && contact.number.includes(' ')) {
+        cleanedCount++;
+        return {
+          ...contact,
+          number: contact.number.replace(/\s+/g, '') // Remove all spaces
+        };
+      }
+      return contact;
+    });
+
+    if (cleanedCount === 0) {
+      antMessage.info('No phone numbers with spaces found.');
+    } else {
+      setAntdContacts(cleanedContacts);
+      antMessage.success(`Cleaned ${cleanedCount} phone numbers by removing spaces.`);
+
+      const updatedRecipients = cleanedContacts.map(contact => ({
+        phone: contact.number,
+        name: contact.name,
+        variables: {
+          var1: contact.var1 || '',
+          var2: contact.var2 || '',
+          var3: contact.var3 || '',
+          var4: contact.var4 || '',
+          var5: contact.var5 || '',
+          var6: contact.var6 || '',
+          var7: contact.var7 || '',
+          var8: contact.var8 || '',
+          var9: contact.var9 || '',
+          var10: contact.var10 || '',
+        }
+      }));
+      setRecipients(updatedRecipients);
+    }
+  };
+
   const handleDeleteAll = () => {
     setAntdContacts([]);
     setRecipients([{
@@ -354,6 +393,14 @@ export default function SelectAudience({
           </Button>
           <Button
             variant="outline"
+            onClick={handleCleanNumbers}
+            className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
+          >
+            <Eraser className="h-4 w-4 mr-2" />
+            Clean Numbers
+          </Button>
+          <Button
+            variant="outline"
             onClick={handleDeleteAll}
             className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
           >
@@ -378,6 +425,7 @@ export default function SelectAudience({
               <h4 className="text-blue-400 font-medium mb-1">Editing Instructions</h4>
               <ul className="text-blue-300 text-sm space-y-1">
                 <li>• Click any cell (Name, Number, or Variables) to edit</li>
+                <li>• Use "Clean Numbers" to remove spaces from phone numbers</li>
               </ul>
             </div>
           </div>

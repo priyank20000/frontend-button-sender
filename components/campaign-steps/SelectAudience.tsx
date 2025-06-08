@@ -29,11 +29,13 @@ export default function SelectAudience({
   const [deleteContactKey, setDeleteContactKey] = useState<string | null>(null);
   const [contactForm] = Form.useForm();
   const [importModalOpen, setImportModalOpen] = useState(false);
+  const [editingCell, setEditingCell] = useState<{ key: string; field: string } | null>(null);
+  const [editValue, setEditValue] = useState('');
 
-  // Handle inline editing for Name column
-  const handleSaveName = (key: string, newName: string) => {
+  // Handle inline editing for any field
+  const handleSaveField = (key: string, field: string, newValue: string) => {
     const updatedContacts = antdContacts.map(contact =>
-      contact.key === key ? { ...contact, name: newName } : contact
+      contact.key === key ? { ...contact, [field]: newValue } : contact
     );
     setAntdContacts(updatedContacts);
 
@@ -54,7 +56,68 @@ export default function SelectAudience({
       }
     }));
     setRecipients(updatedRecipients);
-    antMessage.success('Name updated successfully');
+    antMessage.success(`${field === 'name' ? 'Name' : field === 'number' ? 'Number' : field.toUpperCase()} updated successfully`);
+  };
+
+  // Start editing a cell
+  const startEditing = (record: any, field: string) => {
+    setEditingCell({ key: record.key, field });
+    setEditValue(record[field] || '');
+  };
+
+  // Save the edited value
+  const saveEdit = () => {
+    if (editingCell) {
+      handleSaveField(editingCell.key, editingCell.field, editValue);
+      setEditingCell(null);
+      setEditValue('');
+    }
+  };
+
+  // Cancel editing
+  const cancelEdit = () => {
+    setEditingCell(null);
+    setEditValue('');
+  };
+
+  // Generic function to create editable cell
+  const createEditableCell = (field: string, placeholder: string) => {
+    return {
+      render: (text: string, record: any) => {
+        const isEditing = editingCell?.key === record.key && editingCell?.field === field;
+
+        if (isEditing) {
+          return (
+            <Input
+              value={editValue}
+              onChange={(e) => setEditValue(e.target.value)}
+              onBlur={saveEdit}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  saveEdit(); // Handle Enter key press
+                }
+                if (e.key === 'Escape') {
+                  cancelEdit();
+                }
+              }}
+              placeholder={placeholder}
+              autoFocus
+              className="bg-zinc-800 border-zinc-700 text-zinc-200"
+            />
+          );
+        }
+
+        return (
+          <div
+            onClick={() => startEditing(record, field)}
+            className="cursor-pointer hover:bg-zinc-700/30 px-2 py-1 rounded transition-colors min-h-[32px] flex items-center"
+            title="Click to edit"
+          >
+            {text || <span className="text-zinc-500 italic">{placeholder}</span>}
+          </div>
+        );
+      },
+    };
   };
 
   // Ant Design Table Columns
@@ -74,32 +137,7 @@ export default function SelectAudience({
       key: 'name',
       width: 150,
       fixed: 'left' as const,
-      render: (text: string) => text || 'Enter Here',
-      onCell: (record: any) => ({
-        onDoubleClick: () => {
-          const input = document.createElement('input');
-          input.value = record.name || '';
-          input.style.width = '100%';
-          input.style.padding = '4px';
-          input.style.border = '1px solid #3f3f46';
-          input.style.backgroundColor = '#18181b';
-          input.style.color = '#e4e4e7';
-          input.onblur = () => {
-            handleSaveName(record.key, input.value);
-          };
-          input.onkeydown = (e) => {
-            if (e.key === 'Enter') {
-              handleSaveName(record.key, input.value);
-            }
-          };
-          const cell = document.querySelector(`[data-row-key="${record.key}"] .ant-table-cell[data-column-key="name"]`);
-          if (cell) {
-            cell.innerHTML = '';
-            cell.appendChild(input);
-            input.focus();
-          }
-        },
-      }),
+      ...createEditableCell('name', 'Enter name'),
     },
     {
       title: 'Number',
@@ -107,14 +145,14 @@ export default function SelectAudience({
       key: 'number',
       width: 150,
       fixed: 'left' as const,
-      render: (text: string) => text || 'Enter Here',
+      ...createEditableCell('number', 'Enter phone number'),
     },
     ...Array.from({ length: 10 }, (_, index) => ({
       title: `Variable ${index + 1}`,
       dataIndex: `var${index + 1}`,
       key: `var${index + 1}`,
       width: 120,
-      render: (text: string) => text || 'Enter Here',
+      ...createEditableCell(`var${index + 1}`, `Enter variable ${index + 1}`),
     })),
     {
       title: 'Action',
@@ -147,7 +185,7 @@ export default function SelectAudience({
   const handleContactDelete = (key: string) => {
     setAntdContacts(antdContacts.filter(contact => contact.key !== key));
     antMessage.success('Contact deleted successfully');
-    
+
     const updatedRecipients = antdContacts
       .filter(contact => contact.key !== key)
       .map(contact => ({
@@ -193,7 +231,7 @@ export default function SelectAudience({
       const updatedContacts = [...antdContacts, newContact];
       setAntdContacts(updatedContacts);
       antMessage.success('Contact added successfully');
-      
+
       const updatedRecipients = updatedContacts.map(contact => ({
         phone: contact.number,
         name: contact.name,
@@ -211,7 +249,7 @@ export default function SelectAudience({
         }
       }));
       setRecipients(updatedRecipients);
-      
+
       setIsContactDialogOpen(false);
       contactForm.resetFields();
     } catch (error) {
@@ -238,7 +276,7 @@ export default function SelectAudience({
     } else {
       setAntdContacts(uniqueContacts);
       antMessage.success(`Removed ${antdContacts.length - uniqueContacts.length} duplicate contacts.`);
-      
+
       const updatedRecipients = uniqueContacts.map(contact => ({
         phone: contact.number,
         name: contact.name,
@@ -293,7 +331,7 @@ export default function SelectAudience({
       <div className="space-y-6">
         <div>
           <h3 className="text-lg font-semibold text-zinc-200 mb-2">Select Audience</h3>
-          <p className="text-zinc-400 mb-6">Import recipients from Excel or add manually.</p>
+          <p className="text-zinc-400 mb-6">Import recipients from Excel or add manually. Click any cell to edit.</p>
         </div>
 
         {/* Import Options */}
@@ -332,6 +370,19 @@ export default function SelectAudience({
           </Button>
         </div>
 
+        {/* Instructions */}
+        <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 mb-4">
+          <div className="flex items-start gap-3">
+            <FileText className="h-5 w-5 text-blue-400 mt-0.5 flex-shrink-0" />
+            <div>
+              <h4 className="text-blue-400 font-medium mb-1">Editing Instructions</h4>
+              <ul className="text-blue-300 text-sm space-y-1">
+                <li>• Click any cell (Name, Number, or Variables) to edit</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
         {/* Ant Design Table with Fixed Width Container */}
         <div className="bg-zinc-900 rounded-lg p-4 table-container">
           <AntTable
@@ -344,7 +395,7 @@ export default function SelectAudience({
               showQuickJumper: true,
               showTotal: (total, range) =>
                 `${range[0]}-${range[1]} of ${total} items`,
-              style: { 
+              style: {
                 color: '#e4e4e7',
               }
             }}

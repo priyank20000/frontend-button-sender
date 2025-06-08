@@ -53,7 +53,5 @@ export default function CampaignStats({ stats }: CampaignStatsProps) {
     </CardContent>
   </Card>
 </div>
-
-
   );
 }

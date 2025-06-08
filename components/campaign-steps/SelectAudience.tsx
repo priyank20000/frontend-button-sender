@@ -373,6 +373,19 @@ export default function SelectAudience({
           <p className="text-zinc-400 mb-6">Import recipients from Excel or add manually. Click any cell to edit.</p>
         </div>
 
+        {/* Instructions */}
+        <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 mb-4">
+          <div className="flex items-start gap-3">
+            <FileText className="h-5 w-5 text-blue-400 mt-0.5 flex-shrink-0" />
+            <div>
+              <h4 className="text-blue-400 font-medium mb-1">Editing Instructions</h4>
+              <ul className="text-blue-300 text-sm space-y-1">
+                <li>• Click any cell (Name, Number, or Variables) to edit</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
         {/* Import Options */}
         <div className="flex flex-wrap gap-3 mb-6">
           <Button
@@ -417,19 +430,7 @@ export default function SelectAudience({
           </Button>
         </div>
 
-        {/* Instructions */}
-        <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 mb-4">
-          <div className="flex items-start gap-3">
-            <FileText className="h-5 w-5 text-blue-400 mt-0.5 flex-shrink-0" />
-            <div>
-              <h4 className="text-blue-400 font-medium mb-1">Editing Instructions</h4>
-              <ul className="text-blue-300 text-sm space-y-1">
-                <li>• Click any cell (Name, Number, or Variables) to edit</li>
-                <li>• Use "Clean Numbers" to remove spaces from phone numbers</li>
-              </ul>
-            </div>
-          </div>
-        </div>
+        
 
         {/* Ant Design Table with Fixed Width Container */}
         <div className="bg-zinc-900 rounded-lg p-4 table-container">

@@ -28,9 +28,10 @@ interface CampaignProgress {
   campaignId: string;
   total: number;
   sent: number;
-  failed: number;
-  status: 'processing' | 'completed' | 'failed';
+  status: 'processing' | 'completed'| 'pending';
   currentRecipient?: string;
+  lastMessageStatus?: 'sent' | 'completed';
+  lastRecipient?: string;
 }
 
 export default function FinalStep({
@@ -50,9 +51,10 @@ export default function FinalStep({
   const [isCompleted, setIsCompleted] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [recipientsPerPage] = useState(10);
-  const [campaignProgress, setCampaignProgress] = useState<CampaignProgress | null>(null);
+  const [campaignProgress, setCampaignProgress] = useState<CampaignProgress>({ campaignId: '', total: antdContacts.length, sent: 0, status: 'pending' });
   const [isProcessing, setIsProcessing] = useState(false);
   const [currentCampaignId, setCurrentCampaignId] = useState<string | null>(null);
+  const [recipientStatuses, setRecipientStatuses] = useState<string[]>(new Array(antdContacts.length).fill('pending'));
   const router = useRouter();
 
   // Get token for socket connection
@@ -88,13 +90,26 @@ export default function FinalStep({
           campaignId: data.campaignId,
           total: data.total,
           sent: data.sent,
-          failed: data.failed,
           status: data.status,
-          currentRecipient: data.currentRecipient
+          currentRecipient: data.currentRecipient,
+          lastMessageStatus: data.lastMessageStatus,
+          lastRecipient: data.lastRecipient
         });
 
+        // Update recipient status based on lastMessageStatus
+        if (data.lastRecipient && data.lastMessageStatus) {
+          const recipientIndex = antdContacts.findIndex(contact => contact.name === data.lastRecipient);
+          if (recipientIndex !== -1) {
+            setRecipientStatuses(prev => {
+              const newStatuses = [...prev];
+              newStatuses[recipientIndex] = data.lastMessageStatus;
+              return newStatuses;
+            });
+          }
+        }
+
         // Check if campaign is completed
-        if (data.status === 'completed' || data.status === 'failed') {
+        if (data.status === 'completed') {
           setIsProcessing(false);
           setIsCompleted(true);
         }
@@ -105,7 +120,6 @@ export default function FinalStep({
       if (data.campaignId === currentCampaignId) {
         setIsProcessing(false);
         setIsCompleted(true);
-        setCampaignProgress(prev => prev ? { ...prev, status: data.status } : null);
       }
     };
 
@@ -116,13 +130,13 @@ export default function FinalStep({
       off('campaign.progress', handleCampaignProgress);
       off('campaign.complete', handleCampaignComplete);
     };
-  }, [isConnected, currentCampaignId, on, off]);
+  }, [isConnected, currentCampaignId, on, off, antdContacts]);
 
   const handleSendMessages = async () => {
     setIsLoading(true);
     setIsProcessing(true);
     setIsCompleted(false);
-    setCampaignProgress(null);
+    setRecipientStatuses(new Array(antdContacts.length).fill('pending'));
     
     try {
       const authToken = getToken();
@@ -181,7 +195,6 @@ export default function FinalStep({
         campaignId: result.campaignId || 'unknown',
         total: antdContacts.length,
         sent: 0,
-        failed: 0,
         status: 'processing'
       });
 
@@ -198,7 +211,7 @@ export default function FinalStep({
   const handleComplete = () => {
     onClose();
     // Refresh the messaging page data when navigating back
-    router.push('/dashboard/messaging?refresh=true');
+    router.push('/dashboard/messaging');
   };
 
   const totalRecipients = antdContacts.length;
@@ -219,23 +232,7 @@ export default function FinalStep({
     }
   };
 
-  const getProgressPercentage = () => {
-    if (!campaignProgress) return 0;
-    return Math.round((campaignProgress.sent + campaignProgress.failed) / campaignProgress.total * 100);
-  };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'processing':
-        return 'text-blue-400';
-      case 'completed':
-        return 'text-green-400';
-      case 'failed':
-        return 'text-red-400';
-      default:
-        return 'text-zinc-400';
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -243,63 +240,6 @@ export default function FinalStep({
         <h3 className="text-lg font-semibold text-zinc-200 mb-2">Final Review</h3>
         <p className="text-zinc-400 mb-6">Review your campaign details and send messages to all selected numbers.</p>
       </div>
-
-      {/* Campaign Progress Card */}
-      {(isProcessing || campaignProgress) && (
-        <Card className="bg-zinc-800/50 border-zinc-700">
-          <CardHeader>
-            <CardTitle className="text-zinc-200 flex items-center gap-2">
-              <MessageSquare className="h-5 w-5" />
-              Campaign Progress
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {campaignProgress && (
-              <>
-                <div className="flex justify-between items-center">
-                  <span className="text-zinc-400">Status:</span>
-                  <span className={`font-medium ${getStatusColor(campaignProgress.status)}`}>
-                    {campaignProgress.status.charAt(0).toUpperCase() + campaignProgress.status.slice(1)}
-                  </span>
-                </div>
-                
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-zinc-400">Progress</span>
-                    <span className="text-zinc-200">
-                      {campaignProgress.sent + campaignProgress.failed} / {campaignProgress.total}
-                    </span>
-                  </div>
-                  <Progress 
-                    value={getProgressPercentage()} 
-                    className="h-2"
-                  />
-                  <div className="flex justify-between text-xs text-zinc-400">
-                    <span>{getProgressPercentage()}% Complete</span>
-                    <span>
-                      Sent: {campaignProgress.sent} | Failed: {campaignProgress.failed}
-                    </span>
-                  </div>
-                </div>
-
-                {campaignProgress.currentRecipient && campaignProgress.status === 'processing' && (
-                  <div className="flex items-center gap-2 text-sm text-zinc-400">
-                    <Clock className="h-4 w-4" />
-                    <span>Currently sending to: {campaignProgress.currentRecipient}</span>
-                  </div>
-                )}
-              </>
-            )}
-
-            {isProcessing && !campaignProgress && (
-              <div className="flex items-center gap-2 text-zinc-400">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Initializing campaign...</span>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
 
       {/* Recipients Table */}
       <Card className="bg-zinc-800/50 border-zinc-700">
@@ -322,10 +262,7 @@ export default function FinalStep({
               <TableBody>
                 {currentRecipients.map((contact, index) => {
                   const globalIndex = indexOfFirstRecipient + index;
-                  const recipientStatus = campaignProgress ? 
-                    (globalIndex < campaignProgress.sent + campaignProgress.failed ? 
-                      (globalIndex < campaignProgress.sent ? 'sent' : 'failed') : 'pending') 
-                    : 'pending';
+                  const recipientStatus = recipientStatuses[globalIndex] || 'pending';
 
                   return (
                     <TableRow key={`${contact.number}-${index}`} className="border-zinc-700">
@@ -338,7 +275,7 @@ export default function FinalStep({
                         <TableCell>
                           <span className={`text-xs px-2 py-1 rounded-full ${
                             recipientStatus === 'sent' ? 'bg-green-500/10 text-green-400' :
-                            recipientStatus === 'failed' ? 'bg-red-500/10 text-red-400' :
+                            recipientStatus === 'completed' ? 'bg-green-500/10 text-green-400' :
                             'bg-zinc-500/10 text-zinc-400'
                           }`}>
                             {recipientStatus}

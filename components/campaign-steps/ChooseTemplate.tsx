@@ -114,6 +114,7 @@ export default function ChooseTemplate({
         <Button
           variant="outline"
           className="bg-zinc-800 hover:bg-zinc-700 text-white border-zinc-700"
+          onClick={() => router.push('/templates')}
         >
           <Plus className="h-4 w-4 mr-2" />
           Create A New Template

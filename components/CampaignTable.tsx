@@ -54,10 +54,10 @@ export default function CampaignTable({
 
   const getStatusBadge = (status: string) => {
     const statusInfo = CAMPAIGN_STATUS[status as keyof typeof CAMPAIGN_STATUS];
-    const Icon = statusInfo.icon;
+    // const Icon = statusInfo.icon;
     return (
       <Badge className={`${statusInfo.color} text-white`}>
-        <Icon className="h-3 w-3 mr-1" />
+        {/* <Icon className="h-3 w-3 mr-1" /> */}
         {statusInfo.label}
       </Badge>
     );

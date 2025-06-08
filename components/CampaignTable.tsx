@@ -4,7 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Eye, Trash2, Loader2, CheckCircle, XCircle } from 'lucide-react';
+import { Eye, Trash2, Loader2, CheckCircle, XCircle, Clock } from 'lucide-react';
 
 interface Campaign {
   _id: string;
@@ -16,7 +16,7 @@ interface Campaign {
   };
   instances: any[];
   recipients: any[];
-  status: 'completed' | 'failed';
+  status: 'completed' | 'failed' | 'processing';
   totalMessages: number;
   sentMessages: number;
   failedMessages: number;
@@ -33,7 +33,8 @@ interface CampaignTableProps {
 
 const CAMPAIGN_STATUS = {
   completed: { label: 'Completed', color: 'bg-green-500', icon: CheckCircle },
-  failed: { label: 'Failed', color: 'bg-red-500', icon: XCircle }
+  failed: { label: 'Failed', color: 'bg-red-500', icon: XCircle },
+  processing: { label: 'Processing', color: 'bg-blue-500', icon: Clock }
 };
 
 export default function CampaignTable({
@@ -56,11 +57,17 @@ export default function CampaignTable({
     const statusInfo = CAMPAIGN_STATUS[status as keyof typeof CAMPAIGN_STATUS];
     const Icon = statusInfo.icon;
     return (
-      <Badge className={`${statusInfo.color} text-white`}>
-        <Icon className="h-3 w-3 mr-1" />
+      <Badge className={`${statusInfo.color} text-white flex items-center gap-1`}>
+        <Icon className="h-3 w-3" />
         {statusInfo.label}
+        {status === 'processing' && <Loader2 className="h-3 w-3 animate-spin ml-1" />}
       </Badge>
     );
+  };
+
+  const getProgressPercentage = (campaign: Campaign) => {
+    if (campaign.totalMessages === 0) return 0;
+    return Math.round((campaign.sentMessages + campaign.failedMessages) / campaign.totalMessages * 100);
   };
 
   return (
@@ -72,6 +79,7 @@ export default function CampaignTable({
             <TableHead className="text-zinc-400">Template</TableHead>
             <TableHead className="text-zinc-400">Instances</TableHead>
             <TableHead className="text-zinc-400">Status</TableHead>
+            <TableHead className="text-zinc-400">Progress</TableHead>
             <TableHead className="text-zinc-400">Messages</TableHead>
             <TableHead className="text-zinc-400">Sent</TableHead>
             <TableHead className="text-zinc-400">Failed</TableHead>
@@ -96,9 +104,26 @@ export default function CampaignTable({
               </TableCell>
               <TableCell className="text-zinc-200">{campaign.instances.length}</TableCell>
               <TableCell>{getStatusBadge(campaign.status)}</TableCell>
+              <TableCell>
+                <div className="w-full">
+                  <div className="flex justify-between text-xs text-zinc-400 mb-1">
+                    <span>{getProgressPercentage(campaign)}%</span>
+                    <span>{campaign.sentMessages + campaign.failedMessages}/{campaign.totalMessages}</span>
+                  </div>
+                  <div className="w-full bg-zinc-800 rounded-full h-2">
+                    <div
+                      className={`h-2 rounded-full transition-all duration-300 ${
+                        campaign.status === 'processing' ? 'bg-blue-500' :
+                        campaign.status === 'completed' ? 'bg-green-500' : 'bg-red-500'
+                      }`}
+                      style={{ width: `${getProgressPercentage(campaign)}%` }}
+                    />
+                  </div>
+                </div>
+              </TableCell>
               <TableCell className="text-zinc-200">{campaign.totalMessages}</TableCell>
-              <TableCell className="text-zinc-200">{campaign.sentMessages}</TableCell>
-              <TableCell className="text-zinc-200">{campaign.failedMessages}</TableCell>
+              <TableCell className="text-green-400">{campaign.sentMessages}</TableCell>
+              <TableCell className="text-red-400">{campaign.failedMessages}</TableCell>
               <TableCell className="text-zinc-400">{formatDate(campaign.createdAt)}</TableCell>
               <TableCell>
                 <div className="flex items-center gap-2">
@@ -126,8 +151,8 @@ export default function CampaignTable({
                           variant="ghost"
                           size="sm"
                           onClick={() => onDelete(campaign._id)}
-                          disabled={isDeleting[campaign._id]}
-                          className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 px-3 py-1 rounded-lg transition-colors"
+                          disabled={isDeleting[campaign._id] || campaign.status === 'processing'}
+                          className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 px-3 py-1 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {isDeleting[campaign._id] ? (
                             <Loader2 className="h-4 w-4 animate-spin" />
@@ -137,7 +162,7 @@ export default function CampaignTable({
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>Delete Campaign</p>
+                        <p>{campaign.status === 'processing' ? 'Cannot delete processing campaign' : 'Delete Campaign'}</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>

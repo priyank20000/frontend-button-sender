@@ -5,7 +5,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Button } from "@/components/ui/button";
 import { Plus, MessageSquare, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import Cookies from 'js-cookie';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 // Component imports
 import CampaignStats from '../../../components/CampaignStats';
@@ -53,7 +53,7 @@ interface Campaign {
   };
   instances: Instance[];
   recipients: Recipient[];
-  status: 'completed' | 'failed';
+  status: 'completed' | 'failed' | 'processing';
   totalMessages: number;
   sentMessages: number;
   failedMessages: number;
@@ -108,6 +108,20 @@ export default function MessagingPage() {
   const [antdContacts, setAntdContacts] = useState<any[]>([]);
 
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Check if we need to refresh data (coming from campaign completion)
+  useEffect(() => {
+    const shouldRefresh = searchParams.get('refresh');
+    if (shouldRefresh === 'true') {
+      // Remove the refresh parameter from URL
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, '', newUrl);
+      
+      // Force refresh the data
+      fetchData();
+    }
+  }, [searchParams]);
 
   // Toast functions
   const showToast = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'success') => {
@@ -248,6 +262,19 @@ export default function MessagingPage() {
     fetchData();
   }, [fetchData]);
 
+  // Auto-refresh data every 30 seconds when there are processing campaigns
+  useEffect(() => {
+    const hasProcessingCampaigns = campaigns.some(campaign => campaign.status === 'processing');
+    
+    if (hasProcessingCampaigns) {
+      const interval = setInterval(() => {
+        fetchData();
+      }, 30000); // Refresh every 30 seconds
+
+      return () => clearInterval(interval);
+    }
+  }, [campaigns, fetchData]);
+
   // Campaign operations
   const handleDeleteCampaign = async (campaignId: string) => {
     const token = await getToken();
@@ -337,7 +364,7 @@ export default function MessagingPage() {
       }
 
       setResponseDialogOpen(true);
-      showToast('Campaign sent successfully!', 'success');
+      showToast('Campaign is being processed in the background!', 'success');
       setShowCreateCampaign(false);
 
       // Reset form
@@ -347,6 +374,11 @@ export default function MessagingPage() {
       setRecipients([{ phone: '', name: '', variables: { var1: '', var2: '', var3: '', var4: '', var5: '', var6: '', var7: '', var8: '', var9: '', var10: '' } }]);
       setAntdContacts([]);
       setDelayRange({ start: 3, end: 5 });
+
+      // Refresh data to show the new campaign
+      setTimeout(() => {
+        fetchData();
+      }, 1000);
 
     } catch (err) {
       showToast('Error sending campaign: ' + (err instanceof Error ? err.message : 'Unknown error'), 'error');

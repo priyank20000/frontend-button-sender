@@ -3,7 +3,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle, XCircle } from 'lucide-react';
+import { CheckCircle, XCircle, Clock } from 'lucide-react';
 
 interface Campaign {
   _id: string;
@@ -15,7 +15,7 @@ interface Campaign {
   };
   instances: any[];
   recipients: any[];
-  status: 'completed' | 'failed';
+  status: 'completed' | 'failed' | 'processing';
   totalMessages: number;
   sentMessages: number;
   failedMessages: number;
@@ -31,7 +31,8 @@ interface CampaignDetailsDialogProps {
 
 const CAMPAIGN_STATUS = {
   completed: { label: 'Completed', color: 'bg-green-500', icon: CheckCircle },
-  failed: { label: 'Failed', color: 'bg-red-500', icon: XCircle }
+  failed: { label: 'Failed', color: 'bg-red-500', icon: XCircle },
+  processing: { label: 'Processing', color: 'bg-blue-500', icon: Clock }
 };
 
 export default function CampaignDetailsDialog({
@@ -101,7 +102,14 @@ export default function CampaignDetailsDialog({
                 <Label className="text-zinc-400">Total Messages</Label>
                 <p className="text-zinc-200 font-medium">{campaign.totalMessages}</p>
               </div>
-
+              <div>
+                <Label className="text-zinc-400">Sent Messages</Label>
+                <p className="text-zinc-200 font-medium">{campaign.sentMessages}</p>
+              </div>
+              <div>
+                <Label className="text-zinc-400">Failed Messages</Label>
+                <p className="text-zinc-200 font-medium">{campaign.failedMessages}</p>
+              </div>
               <div>
                 <Label className="text-zinc-400">Delay Range</Label>
                 <p className="text-zinc-200">{campaign.delayRange.start}s - {campaign.delayRange.end}s</p>
@@ -112,6 +120,24 @@ export default function CampaignDetailsDialog({
               </div>
             </div>
           </div>
+
+          {/* Progress Bar for Processing Campaigns */}
+          {campaign.status === 'processing' && (
+            <div className="space-y-2">
+              <Label className="text-zinc-400">Progress</Label>
+              <div className="w-full bg-zinc-800 rounded-full h-2">
+                <div 
+                  className="bg-blue-500 h-2 rounded-full transition-all duration-300"
+                  style={{ 
+                    width: `${campaign.totalMessages > 0 ? (campaign.sentMessages / campaign.totalMessages) * 100 : 0}%` 
+                  }}
+                ></div>
+              </div>
+              <p className="text-zinc-400 text-sm">
+                {campaign.sentMessages} of {campaign.totalMessages} messages sent
+              </p>
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>

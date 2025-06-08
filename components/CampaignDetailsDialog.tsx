@@ -101,35 +101,15 @@ export default function CampaignDetailsDialog({
                 <Label className="text-zinc-400">Total Messages</Label>
                 <p className="text-zinc-200 font-medium">{campaign.totalMessages}</p>
               </div>
-             
+
               <div>
                 <Label className="text-zinc-400">Delay Range</Label>
                 <p className="text-zinc-200">{campaign.delayRange.start}s - {campaign.delayRange.end}s</p>
               </div>
-            </div>
-          </div>
-
-          {/* Progress Bar */}
-          <div className="space-y-2">
-            <Label className="text-zinc-400">Progress</Label>
-            <div className="w-full bg-zinc-800 rounded-full h-2">
-              <div
-                className="bg-gradient-to-r from-blue-600 to-indigo-600 h-2 rounded-full transition-all duration-300"
-                style={{
-                  width: `${campaign.totalMessages > 0 ? (campaign.sentMessages / campaign.totalMessages) * 100 : 0}%`,
-                }}
-              />
-            </div>
-            <p className="text-zinc-400 text-sm">
-              {campaign.sentMessages} of {campaign.totalMessages} messages sent
-            </p>
-          </div>
-
-          {/* Timestamps */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <Label className="text-zinc-400">Created At</Label>
-              <p className="text-zinc-200">{formatDate(campaign.createdAt)}</p>
+              <div>
+                <Label className="text-zinc-400">Created At</Label>
+                <p className="text-zinc-200">{formatDate(campaign.createdAt)}</p>
+              </div>
             </div>
           </div>
         </div>

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Plus, MessageSquare, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, MessageSquare, Loader2, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import Cookies from 'js-cookie';
 import { useRouter, useSearchParams } from 'next/navigation';
 
@@ -65,6 +65,7 @@ interface CampaignStatsType {
   total: number;
   completed: number;
   failed: number;
+  processing: number;
 }
 
 interface ToastMessage {
@@ -97,7 +98,8 @@ export default function MessagingPage() {
   const [campaignStats, setCampaignStats] = useState<CampaignStatsType>({
     total: 0,
     completed: 0,
-    failed: 0
+    failed: 0,
+    processing: 0
   });
   const [showCreateCampaign, setShowCreateCampaign] = useState(false);
   const [isCreatingCampaign, setIsCreatingCampaign] = useState(false);
@@ -106,6 +108,7 @@ export default function MessagingPage() {
   const [isDeleting, setIsDeleting] = useState<{ [key: string]: boolean }>({});
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [antdContacts, setAntdContacts] = useState<any[]>([]);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -166,56 +169,59 @@ export default function MessagingPage() {
     router.push('/login');
   };
 
-  // Fetch data
-  const fetchData = useCallback(async () => {
+  // Optimized fetch data with better error handling and caching
+  const fetchData = useCallback(async (showLoader = true) => {
     const token = await getToken();
     if (!token) {
       router.push('/login');
       return;
     }
 
-    setIsLoading(true);
+    if (showLoader) {
+      setIsLoading(true);
+    }
+    
     try {
-      // Fetch instances
-      const instanceResponse = await fetch('https://whatsapp.recuperafly.com/api/instance/all', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({}),
-      });
+      // Fetch instances and campaigns in parallel for better performance
+      const [instanceResponse, campaignResponse] = await Promise.all([
+        fetch('https://whatsapp.recuperafly.com/api/instance/all', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({}),
+        }),
+        fetch('https://whatsapp.recuperafly.com/api/template/message/all', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            page: currentPage - 1,
+            limit: campaignsPerPage,
+            search: searchValue,
+            status: statusFilter === 'all' ? undefined : statusFilter
+          }),
+        })
+      ]);
 
-      if (instanceResponse.status === 401) {
+      if (instanceResponse.status === 401 || campaignResponse.status === 401) {
         handleUnauthorized();
         return;
       }
 
-      const instanceData = await instanceResponse.json();
+      const [instanceData, campaignData] = await Promise.all([
+        instanceResponse.json(),
+        campaignResponse.json()
+      ]);
+
+      // Process instances
       const fetchedInstances = instanceData.status ? instanceData.instances || [] : [];
       setInstances(fetchedInstances);
 
-      // Fetch campaigns with pagination
-      const campaignResponse = await fetch('https://whatsapp.recuperafly.com/api/template/message/all', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          page: currentPage - 1, // Backend expects 0-based page
-          limit: campaignsPerPage,
-          search: searchValue,
-          status: statusFilter === 'all' ? undefined : statusFilter
-        }),
-      });
-
-      if (campaignResponse.status === 401) {
-        handleUnauthorized();
-        return;
-      }
-
-      const campaignData = await campaignResponse.json();
+      // Process campaigns
       if (campaignData.status) {
         const mappedCampaigns: Campaign[] = campaignData.messages.map((msg: any) => ({
           _id: msg._id,
@@ -243,18 +249,26 @@ export default function MessagingPage() {
 
         setCampaigns(mappedCampaigns);
         setTotalCampaigns(campaignData.total || 0);
-        setCampaignStats({
+        
+        // Calculate stats properly
+        const stats = {
           total: campaignData.total || 0,
-          completed: campaignData.cumulativeStats?.completed || 0,
-          failed: campaignData.cumulativeStats?.failed || 0,
-        });
+          completed: mappedCampaigns.filter(c => c.status === 'completed').length,
+          failed: mappedCampaigns.filter(c => c.status === 'failed').length,
+          processing: mappedCampaigns.filter(c => c.status === 'processing').length,
+        };
+        
+        setCampaignStats(stats);
       } else {
         showToast(campaignData.message || 'Failed to fetch campaigns', 'error');
       }
     } catch (err) {
       showToast('Error fetching data: ' + (err instanceof Error ? err.message : 'Unknown error'), 'error');
     } finally {
-      setIsLoading(false);
+      if (showLoader) {
+        setIsLoading(false);
+      }
+      setIsRefreshing(false);
     }
   }, [router, currentPage, campaignsPerPage, searchValue, statusFilter]);
 
@@ -268,12 +282,18 @@ export default function MessagingPage() {
     
     if (hasProcessingCampaigns) {
       const interval = setInterval(() => {
-        fetchData();
-      }, 30000); // Refresh every 30 seconds
+        fetchData(false); // Don't show loader for auto-refresh
+      }, 15000); // Refresh every 15 seconds for better UX
 
       return () => clearInterval(interval);
     }
   }, [campaigns, fetchData]);
+
+  // Manual refresh function
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await fetchData(false);
+  };
 
   // Campaign operations
   const handleDeleteCampaign = async (campaignId: string) => {
@@ -302,8 +322,15 @@ export default function MessagingPage() {
 
       const data = await response.json();
       if (data.status) {
+        // Update campaigns list immediately
         setCampaigns(prev => prev.filter(c => c._id !== campaignId));
         setTotalCampaigns(prev => prev - 1);
+        
+        // Update stats immediately
+        setCampaignStats(prev => ({
+          ...prev,
+          total: prev.total - 1
+        }));
         
         const newTotalPages = Math.ceil((totalCampaigns - 1) / campaignsPerPage);
         if (currentPage > newTotalPages && newTotalPages > 0) {
@@ -375,9 +402,9 @@ export default function MessagingPage() {
       setAntdContacts([]);
       setDelayRange({ start: 3, end: 5 });
 
-      // Refresh data to show the new campaign
+      // Refresh data immediately to show the new campaign
       setTimeout(() => {
-        fetchData();
+        fetchData(false);
       }, 1000);
 
     } catch (err) {
@@ -414,13 +441,23 @@ export default function MessagingPage() {
             </h1>
             <p className="text-zinc-400 mt-2">Manage your WhatsApp messaging campaigns</p>
           </div>
-          <button
-            onClick={() => setShowCreateCampaign(true)}
-            className="w-full sm:w-auto bg-zinc-800 hover:bg-zinc-700 text-white font-medium px-5 py-2 h-12 rounded-xl transition-all duration-300 flex items-center justify-center gap-2"
-          >
-            <Plus className="h-5 w-5" />
-            Create Campaign
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="bg-zinc-800 hover:bg-zinc-700 text-white font-medium px-4 py-2 h-12 rounded-xl transition-all duration-300 flex items-center justify-center gap-2"
+            >
+              <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+              Refresh
+            </button>
+            <button
+              onClick={() => setShowCreateCampaign(true)}
+              className="bg-zinc-800 hover:bg-zinc-700 text-white font-medium px-5 py-2 h-12 rounded-xl transition-all duration-300 flex items-center justify-center gap-2"
+            >
+              <Plus className="h-5 w-5" />
+              Create Campaign
+            </button>
+          </div>
         </div>
 
         {/* Statistics Cards */}
@@ -432,7 +469,7 @@ export default function MessagingPage() {
           setSearchValue={setSearchValue}
           statusFilter={statusFilter}
           setStatusFilter={setStatusFilter}
-          onRefresh={fetchData}
+          onRefresh={handleRefresh}
         />
 
         {/* Campaigns Table */}

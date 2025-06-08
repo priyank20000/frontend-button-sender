@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Progress } from "@/components/ui/progress";
 import { Send, Loader2, CheckCircle, ArrowLeft, ChevronLeft, ChevronRight, Clock, MessageSquare } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useSocket } from "../../hooks/useSocket";
@@ -211,7 +210,7 @@ export default function FinalStep({
   const handleComplete = () => {
     onClose();
     // Refresh the messaging page data when navigating back
-    router.push('/dashboard/messaging');
+    router.push('/dashboard/messaging?refresh=true');
   };
 
   const totalRecipients = antdContacts.length;
@@ -232,7 +231,10 @@ export default function FinalStep({
     }
   };
 
-
+  const getProgressPercentage = () => {
+    if (campaignProgress.total === 0) return 0;
+    return Math.round((campaignProgress.sent / campaignProgress.total) * 100);
+  };
 
   return (
     <div className="space-y-6">
@@ -240,6 +242,21 @@ export default function FinalStep({
         <h3 className="text-lg font-semibold text-zinc-200 mb-2">Final Review</h3>
         <p className="text-zinc-400 mb-6">Review your campaign details and send messages to all selected numbers.</p>
       </div>
+
+      {/* Completion Message */}
+      {isCompleted && (
+        <Card className="bg-green-500/10 border-green-500/20">
+          <CardContent className="p-6">
+            <div className="flex items-center gap-3">
+              <CheckCircle className="h-8 w-8 text-green-500" />
+              <div>
+                <h3 className="text-green-400 font-semibold text-lg">Campaign Completed!</h3>
+                <p className="text-green-300">All messages have been sent successfully.</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Recipients Table */}
       <Card className="bg-zinc-800/50 border-zinc-700">
@@ -254,7 +271,7 @@ export default function FinalStep({
                   <TableHead className="text-zinc-400">SN</TableHead>
                   <TableHead className="text-zinc-400">Name</TableHead>
                   <TableHead className="text-zinc-400">Phone</TableHead>
-                  {campaignProgress && (
+                  {(isProcessing || isCompleted) && (
                     <TableHead className="text-zinc-400">Status</TableHead>
                   )}
                 </TableRow>
@@ -271,14 +288,15 @@ export default function FinalStep({
                       </TableCell>
                       <TableCell className="text-zinc-200 font-medium">{contact.name}</TableCell>
                       <TableCell className="text-zinc-200">{contact.number}</TableCell>
-                      {campaignProgress && (
+                      {(isProcessing || isCompleted) && (
                         <TableCell>
                           <span className={`text-xs px-2 py-1 rounded-full ${
-                            recipientStatus === 'sent' ? 'bg-green-500/10 text-green-400' :
-                            recipientStatus === 'completed' ? 'bg-green-500/10 text-green-400' :
+                            recipientStatus === 'sent' || recipientStatus === 'completed' ? 'bg-green-500/10 text-green-400' :
+                            recipientStatus === 'failed' ? 'bg-red-500/10 text-red-400' :
                             'bg-zinc-500/10 text-zinc-400'
                           }`}>
-                            {recipientStatus}
+                            {recipientStatus === 'sent' || recipientStatus === 'completed' ? 'Sent' :
+                             recipientStatus === 'failed' ? 'Failed' : 'Pending'}
                           </span>
                         </TableCell>
                       )}

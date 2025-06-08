@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Send, Loader2, CheckCircle, XCircle, Clock, Users, MessageSquare, Smartphone, ChevronLeft, ChevronRight, ArrowLeft } from 'lucide-react';
+import { Send, Loader2, CheckCircle, XCircle, Clock, ChevronLeft, ChevronRight, ArrowLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 interface FinalStepProps {
@@ -52,38 +52,34 @@ export default function FinalStep({
   const selectedTemplateData = templates.find(t => t._id === selectedTemplate);
   const selectedInstancesData = instances.filter(i => selectedInstances.includes(i._id));
 
-  // Create message statuses for each contact-instance combination
+  // Create message statuses with round-robin distribution of contacts to instances
   const createMessageStatuses = () => {
     const statuses: MessageStatus[] = [];
     antdContacts.forEach((contact, contactIndex) => {
-      selectedInstances.forEach((instanceId, instanceIndex) => {
-        statuses.push({
-          phone: contact.number,
-          name: contact.name,
-          instanceId: instanceId,
-          status: 'pending'
-        });
+      // Assign the contact to an instance using round-robin distribution
+      const instanceIndex = contactIndex % selectedInstances.length;
+      const instanceId = selectedInstances[instanceIndex];
+      statuses.push({
+        phone: contact.number,
+        name: contact.name,
+        instanceId: instanceId,
+        status: 'pending'
       });
     });
     return statuses;
   };
 
   const handleSendMessages = async () => {
-    // Initialize message statuses
     const initialStatuses = createMessageStatuses();
     setMessageStatuses(initialStatuses);
 
-    // Simulate sending messages with status updates
     for (let i = 0; i < initialStatuses.length; i++) {
-      // Update status to processing
       setMessageStatuses(prev => prev.map((status, index) => 
         index === i ? { ...status, status: 'processing' } : status
       ));
 
-      // Simulate delay
       await new Promise(resolve => setTimeout(resolve, 800));
 
-      // Update status to completed/failed (simulate success rate)
       setMessageStatuses(prev => prev.map((status, index) => 
         index === i ? { 
           ...status, 
@@ -93,7 +89,6 @@ export default function FinalStep({
       ));
     }
 
-    // Call the original send campaign function
     await onSendCampaign();
     setIsCompleted(true);
   };
@@ -142,7 +137,6 @@ export default function FinalStep({
   const pendingCount = messageStatuses.filter(s => s.status === 'pending').length;
   const processingCount = messageStatuses.filter(s => s.status === 'processing').length;
 
-  // Pagination for recipients
   const totalRecipients = antdContacts.length;
   const totalPages = Math.ceil(totalRecipients / recipientsPerPage);
   const indexOfLastRecipient = currentPage * recipientsPerPage;
@@ -168,8 +162,6 @@ export default function FinalStep({
         <p className="text-zinc-400 mb-6">Review your campaign details and send messages to all selected numbers.</p>
       </div>
 
-
-      {/* Message Status Summary */}
       {messageStatuses.length > 0 && (
         <Card className="bg-zinc-800/50 border-zinc-700">
           <CardHeader>
@@ -195,7 +187,6 @@ export default function FinalStep({
               </div>
             </div>
             
-            {/* Progress Bar */}
             <div className="w-full bg-zinc-700 rounded-full h-2 mb-4">
               <div
                 className="bg-gradient-to-r from-green-500 to-blue-500 h-2 rounded-full transition-all duration-300"
@@ -208,7 +199,6 @@ export default function FinalStep({
         </Card>
       )}
 
-      {/* Recipients Table */}
       <Card className="bg-zinc-800/50 border-zinc-700">
         <CardHeader>
           <CardTitle className="text-zinc-200">Recipients ({antdContacts.length})</CardTitle>
@@ -226,62 +216,62 @@ export default function FinalStep({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {currentRecipients.map((contact, index) => 
-                  selectedInstancesData.map((instance, instanceIndex) => {
-                    const globalIndex = (indexOfFirstRecipient + index) * selectedInstances.length + instanceIndex;
-                    const messageStatus = messageStatuses.find(
-                      ms => ms.phone === contact.number && ms.instanceId === instance._id
-                    );
-                    
-                    return (
-                      <TableRow key={`${contact.number}-${instance._id}`} className="border-zinc-700">
-                        <TableCell className="text-zinc-200">
-                          {indexOfFirstRecipient + index + 1}.{instanceIndex + 1}
-                        </TableCell>
-                        <TableCell className="text-zinc-200 font-medium">{contact.name}</TableCell>
-                        <TableCell className="text-zinc-200">{contact.number}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            {instance.whatsapp.profile ? (
-                              <img
-                                src={instance.whatsapp.profile}
-                                alt="Profile"
-                                className="w-8 h-8 rounded-full object-cover border border-zinc-600"
-                              />
-                            ) : (
-                              <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center border border-zinc-600">
-                                <span className="text-zinc-300 font-semibold text-xs">
-                                  {(instance.name || `D${instance._id.slice(-2)}`).charAt(0).toUpperCase()}
-                                </span>
-                              </div>
-                            )}
-                            <div>
-                              <p className="text-zinc-200 text-sm font-medium">
-                                {instance.name || `Device ${instance._id.slice(-4)}`}
-                              </p>
-                              {instance.whatsapp.phone && (
-                                <p className="text-zinc-400 text-xs">{instance.whatsapp.phone}</p>
-                              )}
+                {currentRecipients.map((contact, index) => {
+                  const globalIndex = indexOfFirstRecipient + index;
+                  const instanceIndex = globalIndex % selectedInstances.length;
+                  const instanceId = selectedInstances[instanceIndex];
+                  const instance = getInstanceDetails(instanceId);
+                  const messageStatus = messageStatuses.find(
+                    ms => ms.phone === contact.number && ms.instanceId === instanceId
+                  );
+
+                  return (
+                    <TableRow key={`${contact.number}-${instanceId}`} className="border-zinc-700">
+                      <TableCell className="text-zinc-200">
+                        {indexOfFirstRecipient + index + 1}
+                      </TableCell>
+                      <TableCell className="text-zinc-200 font-medium">{contact.name}</TableCell>
+                      <TableCell className="text-zinc-200">{contact.number}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          {instance.whatsapp.profile ? (
+                            <img
+                              src={instance.whatsapp.profile}
+                              alt="Profile"
+                              className="w-8 h-8 rounded-full object-cover border border-zinc-600"
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-zinc-700 flex items-center justify-center border border-zinc-600">
+                              <span className="text-zinc-300 font-semibold text-xs">
+                                {(instance.name || `D${instance._id.slice(-2)}`).charAt(0).toUpperCase()}
+                              </span>
                             </div>
+                          )}
+                          <div>
+                            <p className="text-zinc-200 text-sm font-medium">
+                              {instance.name || `Device ${instance._id.slice(-4)}`}
+                            </p>
+                            {instance.whatsapp.phone && (
+                              <p className="text-zinc-400 text-xs">{instance.whatsapp.phone}</p>
+                            )}
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            {getStatusIcon(messageStatus?.status || 'pending')}
-                            <Badge className={`${getStatusColor(messageStatus?.status || 'pending')} border`}>
-                              {(messageStatus?.status || 'pending').charAt(0).toUpperCase() + (messageStatus?.status || 'pending').slice(1)}
-                            </Badge>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          {getStatusIcon(messageStatus?.status || 'pending')}
+                          <Badge className={`${getStatusColor(messageStatus?.status || 'pending')} border`}>
+                            {(messageStatus?.status || 'pending').charAt(0).toUpperCase() + (messageStatus?.status || 'pending').slice(1)}
+                          </Badge>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
 
-          {/* Pagination */}
           {totalPages > 1 && (
             <div className="flex flex-col sm:flex-row justify-between items-center mt-6 pt-4 border-t border-zinc-700 gap-4">
               <div className="flex items-center gap-3">
@@ -352,7 +342,6 @@ export default function FinalStep({
         </CardContent>
       </Card>
 
-      {/* Action Buttons */}
       <div className="flex justify-between items-center pt-6 border-t border-zinc-800">
         <div className="flex gap-3">
           {onBack && (

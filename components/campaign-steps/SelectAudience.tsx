@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Upload, Users, Trash2, Plus, FileText } from 'lucide-react';
-import { ConfigProvider, Table as AntTable, Button as AntButton, Modal, Form, Input as AntInput, message as antMessage } from 'antd';
+import { ConfigProvider, Table as AntTable, Button as AntButton, Form, message as antMessage } from 'antd';
 import { DeleteOutlined } from '@ant-design/icons';
 import ExcelImportModal from '../ExcelImportModal';
 
@@ -22,8 +24,8 @@ export default function SelectAudience({
   setRecipients,
   showToast
 }: SelectAudienceProps) {
-  const [isContactModalVisible, setIsContactModalVisible] = useState(false);
-  const [isDeleteModalVisible, setIsDeleteModalVisible] = useState(false);
+  const [isContactDialogOpen, setIsContactDialogOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deleteContactKey, setDeleteContactKey] = useState<string | null>(null);
   const [contactForm] = Form.useForm();
   const [importModalOpen, setImportModalOpen] = useState(false);
@@ -128,7 +130,7 @@ export default function SelectAudience({
           style={{ color: '#ef4444' }}
           onClick={() => {
             setDeleteContactKey(record.key);
-            setIsDeleteModalVisible(true);
+            setIsDeleteDialogOpen(true);
           }}
         >
           Delete
@@ -139,7 +141,7 @@ export default function SelectAudience({
 
   const handleContactAdd = () => {
     contactForm.resetFields();
-    setIsContactModalVisible(true);
+    setIsContactDialogOpen(true);
   };
 
   const handleContactDelete = (key: string) => {
@@ -170,13 +172,13 @@ export default function SelectAudience({
   const handleConfirmDelete = () => {
     if (deleteContactKey) {
       handleContactDelete(deleteContactKey);
-      setIsDeleteModalVisible(false);
+      setIsDeleteDialogOpen(false);
       setDeleteContactKey(null);
     }
   };
 
   const handleCancelDelete = () => {
-    setIsDeleteModalVisible(false);
+    setIsDeleteDialogOpen(false);
     setDeleteContactKey(null);
   };
 
@@ -210,7 +212,7 @@ export default function SelectAudience({
       }));
       setRecipients(updatedRecipients);
       
-      setIsContactModalVisible(false);
+      setIsContactDialogOpen(false);
       contactForm.resetFields();
     } catch (error) {
       console.error('Validation failed:', error);
@@ -218,7 +220,7 @@ export default function SelectAudience({
   };
 
   const handleContactCancel = () => {
-    setIsContactModalVisible(false);
+    setIsContactDialogOpen(false);
     contactForm.resetFields();
   };
 
@@ -284,20 +286,6 @@ export default function SelectAudience({
             headerColor: '#a1a1aa',
             rowHoverBg: '#3f3f46',
             borderColor: '#3f3f46',
-          },
-          Modal: {
-            contentBg: '#27272a',
-            headerBg: '#27272a',
-          },
-          Input: {
-            colorBgContainer: '#18181b',
-            colorBorder: '#3f3f46',
-            colorText: '#e4e4e7',
-          },
-          Button: {
-            colorBgContainer: '#18181b',
-            colorBorder: '#3f3f46',
-            colorText: '#e4e4e7',
           },
         },
       }}
@@ -379,79 +367,102 @@ export default function SelectAudience({
           </div>
         </div>
 
-        {/* Contact Modal for Adding New Contact */}
-        <Modal
-          title="Add New Contact"
-          open={isContactModalVisible}
-          onOk={handleContactSubmit}
-          onCancel={handleContactCancel}
-          width={800}
-          okText="Add"
-          style={{
-            top: 20,
-          }}
-          bodyStyle={{
-            backgroundColor: '#27272a',
-            color: '#e4e4e7',
-          }}
-        >
-          <Form
-            form={contactForm}
-            layout="vertical"
-            requiredMark={false}
-          >
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Form.Item
-                label={<span style={{ color: '#a1a1aa' }}>Name</span>}
-                name="name"
-                rules={[{ required: true, message: 'Please enter name' }]}
-              >
-                <AntInput placeholder="Enter name" />
-              </Form.Item>
-              <Form.Item
-                label={<span style={{ color: '#a1a1aa' }}>Number</span>}
-                name="number"
-                rules={[{ required: true, message: 'Please enter number' }]}
-              >
-                <AntInput placeholder="Enter phone number" />
-              </Form.Item>
-            </div>
-
-            <div className="border-t border-zinc-700 pt-4 mt-4">
-              <h4 className="text-zinc-200 mb-4">Custom Variables</h4>
+        {/* Contact Dialog for Adding New Contact */}
+        <Dialog open={isContactDialogOpen} onOpenChange={setIsContactDialogOpen}>
+          <DialogContent className="bg-zinc-800 text-zinc-200 border-zinc-700 max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-zinc-200">Add New Contact</DialogTitle>
+            </DialogHeader>
+            <Form
+              form={contactForm}
+              layout="vertical"
+              requiredMark={false}
+              className="space-y-4"
+            >
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {Array.from({ length: 10 }, (_, index) => (
-                  <Form.Item
-                    key={index}
-                    label={<span style={{ color: '#a1a1aa' }}>Variable ${index + 1}</span>}
-                    name={`var${index + 1}`}
-                  >
-                    <AntInput placeholder={`Enter variable ${index + 1}`} />
-                  </Form.Item>
-                ))}
+                <Form.Item
+                  label={<span className="text-zinc-400">Name</span>}
+                  name="name"
+                  rules={[{ required: true, message: 'Please enter name' }]}
+                >
+                  <Input
+                    placeholder="Enter name"
+                    autoFocus
+                    className="bg-zinc-900 border-zinc-700 text-zinc-200 focus:border-blue-500"
+                  />
+                </Form.Item>
+                <Form.Item
+                  label={<span className="text-zinc-400">Phone Number</span>}
+                  name="number"
+                  rules={[{ required: true, message: 'Please enter number' }]}
+                >
+                  <Input
+                    placeholder="Enter phone number"
+                    className="bg-zinc-900 border-zinc-700 text-zinc-200 focus:border-blue-500"
+                  />
+                </Form.Item>
               </div>
-            </div>
-          </Form>
-        </Modal>
 
-        {/* Delete Confirmation Modal */}
-        <Modal
-          title="Confirm Delete"
-          open={isDeleteModalVisible}
-          onOk={handleConfirmDelete}
-          onCancel={handleCancelDelete}
-          okText="Yes"
-          cancelText="No"
-          centered
-          okButtonProps={{ style: { backgroundColor: '#ef4444', borderColor: '#ef4444' } }}
-          bodyStyle={{
-            backgroundColor: '#27272a',
-            color: '#e4e4e7',
-            textAlign: 'center',
-          }}
-        >
-          <p>Are you sure you want to delete this contact?</p>
-        </Modal>
+              <div className="border-t border-zinc-700 pt-4 mt-4">
+                <h4 className="text-zinc-200 mb-4">Custom Variables</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {Array.from({ length: 10 }, (_, index) => (
+                    <Form.Item
+                      key={index}
+                      label={<span className="text-zinc-400">Variable {index + 1}</span>}
+                      name={`var${index + 1}`}
+                    >
+                      <Input
+                        placeholder={`Enter variable ${index + 1}`}
+                        className="bg-zinc-900 border-zinc-700 text-zinc-200 focus:border-blue-500"
+                      />
+                    </Form.Item>
+                  ))}
+                </div>
+              </div>
+            </Form>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={handleContactCancel}
+                className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleContactSubmit}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                Add
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <DialogContent className="bg-zinc-800 text-zinc-200 border-zinc-700">
+            <DialogHeader>
+              <DialogTitle className="text-zinc-200">Confirm Delete</DialogTitle>
+            </DialogHeader>
+            <p className="text-center text-zinc-400">Are you sure you want to delete this contact?</p>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={handleCancelDelete}
+                className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
+              >
+                No
+              </Button>
+              <Button
+                onClick={handleConfirmDelete}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                Yes
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Excel Import Modal */}
         <ExcelImportModal
@@ -526,6 +537,24 @@ export default function SelectAudience({
         }
         
         .custom-table .ant-table-body::-webkit-scrollbar-thumb:hover {
+          background: #555;
+        }
+
+        /* Custom scrollbar for dialog */
+        .overflow-y-auto::-webkit-scrollbar {
+          width: 8px;
+        }
+
+        .overflow-y-auto::-webkit-scrollbar-track {
+          background: #3f3f46;
+        }
+
+        .overflow-y-auto::-webkit-scrollbar-thumb {
+          background: #888;
+          border-radius: 4px;
+        }
+
+        .overflow-y-auto::-webkit-scrollbar-thumb:hover {
           background: #555;
         }
       `}</style>

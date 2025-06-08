@@ -61,8 +61,7 @@ interface Campaign {
   delayRange: { start: number; end: number };
 }
 
-
-interface CampaignStats {
+interface CampaignStatsType {
   total: number;
   completed: number;
   failed: number;
@@ -92,9 +91,10 @@ export default function MessagingPage() {
   const [campaignName, setCampaignName] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [campaignsPerPage] = useState(10);
+  const [totalCampaigns, setTotalCampaigns] = useState(0);
   const [searchValue, setSearchValue] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [campaignStats, setCampaignStats] = useState<CampaignStats>({
+  const [campaignStats, setCampaignStats] = useState<CampaignStatsType>({
     total: 0,
     completed: 0,
     failed: 0
@@ -149,14 +149,14 @@ export default function MessagingPage() {
     localStorage.removeItem('token');
     Cookies.remove('user', { path: '/', secure: window.location.protocol === 'https:', sameSite: 'Lax' });
     localStorage.removeItem('user');
-    router.push('/');
+    router.push('/login');
   };
 
   // Fetch data
   const fetchData = useCallback(async () => {
     const token = await getToken();
     if (!token) {
-      router.push('/');
+      router.push('/login');
       return;
     }
 
@@ -181,14 +181,19 @@ export default function MessagingPage() {
       const fetchedInstances = instanceData.status ? instanceData.instances || [] : [];
       setInstances(fetchedInstances);
 
-      // Fetch campaigns
+      // Fetch campaigns with pagination
       const campaignResponse = await fetch('https://whatsapp.recuperafly.com/api/template/message/all', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({}),
+        body: JSON.stringify({
+          page: currentPage - 1, // Backend expects 0-based page
+          limit: campaignsPerPage,
+          search: searchValue,
+          status: statusFilter === 'all' ? undefined : statusFilter
+        }),
       });
 
       if (campaignResponse.status === 401) {
@@ -223,22 +228,12 @@ export default function MessagingPage() {
         }));
 
         setCampaigns(mappedCampaigns);
-
-        // Calculate stats
-        const stats = mappedCampaigns.reduce(
-          (acc, campaign) => {
-            acc.total++;
-            acc[campaign.status]++;
-            return acc;
-          },
-          {
-            total: 0,
-            completed: 0,
-            failed: 0,
-          }
-        );
-
-        setCampaignStats(stats);
+        setTotalCampaigns(campaignData.total || 0);
+        setCampaignStats({
+          total: campaignData.total || 0,
+          completed: campaignData.cumulativeStats?.completed || 0,
+          failed: campaignData.cumulativeStats?.failed || 0,
+        });
       } else {
         showToast(campaignData.message || 'Failed to fetch campaigns', 'error');
       }
@@ -247,7 +242,7 @@ export default function MessagingPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [router]);
+  }, [router, currentPage, campaignsPerPage, searchValue, statusFilter]);
 
   useEffect(() => {
     fetchData();
@@ -258,7 +253,7 @@ export default function MessagingPage() {
     const token = await getToken();
     if (!token) {
       showToast('Please log in to delete campaign', 'error');
-      router.push('/');
+      router.push('/login');
       return;
     }
 
@@ -281,8 +276,9 @@ export default function MessagingPage() {
       const data = await response.json();
       if (data.status) {
         setCampaigns(prev => prev.filter(c => c._id !== campaignId));
+        setTotalCampaigns(prev => prev - 1);
         
-        const newTotalPages = Math.ceil((campaigns.length - 1) / campaignsPerPage);
+        const newTotalPages = Math.ceil((totalCampaigns - 1) / campaignsPerPage);
         if (currentPage > newTotalPages && newTotalPages > 0) {
           setCurrentPage(newTotalPages);
         }
@@ -301,7 +297,7 @@ export default function MessagingPage() {
   const handleSendCampaign = async () => {
     const token = await getToken();
     if (!token) {
-      router.push('/');
+      router.push('/login');
       return;
     }
 
@@ -359,18 +355,8 @@ export default function MessagingPage() {
     }
   };
 
-  // Filter and pagination
-  const filteredCampaigns = campaigns.filter(campaign => {
-    const matchesSearch = campaign.name.toLowerCase().includes(searchValue.toLowerCase()) ||
-                         campaign.template.name.toLowerCase().includes(searchValue.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || campaign.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
-
-  const indexOfLastCampaign = currentPage * campaignsPerPage;
-  const indexOfFirstCampaign = indexOfLastCampaign - campaignsPerPage;
-  const currentCampaigns = filteredCampaigns.slice(indexOfFirstCampaign, indexOfLastCampaign);
-  const totalPages = Math.ceil(filteredCampaigns.length / campaignsPerPage);
+  // Pagination
+  const totalPages = Math.ceil(totalCampaigns / campaignsPerPage);
 
   const handleNextPage = () => {
     if (currentPage < totalPages) {
@@ -430,7 +416,7 @@ export default function MessagingPage() {
                   <p className="text-zinc-400">Loading campaigns...</p>
                 </div>
               </div>
-            ) : currentCampaigns.length === 0 ? (
+            ) : campaigns.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64">
                 <MessageSquare className="h-16 w-16 text-zinc-600 mb-4" />
                 <h3 className="text-xl font-semibold text-zinc-300 mb-2">No Campaigns Found</h3>
@@ -445,7 +431,7 @@ export default function MessagingPage() {
               </div>
             ) : (
               <CampaignTable
-                campaigns={currentCampaigns}
+                campaigns={campaigns}
                 isDeleting={isDeleting}
                 onViewDetails={(campaign) => {
                   setSelectedCampaign(campaign);
@@ -461,10 +447,11 @@ export default function MessagingPage() {
             <CardFooter className="flex flex-col sm:flex-row justify-between items-center mt-6 sm:mt-8 bg-zinc-900 border border-zinc-800 rounded-xl p-4 gap-4">
               <div className="flex items-center gap-3">
                 <span className="text-zinc-400 text-sm">
-                  Showing {indexOfFirstCampaign + 1}-{Math.min(indexOfLastCampaign, filteredCampaigns.length)} of {filteredCampaigns.length} campaigns
+                  Showing {(currentPage - 1) * campaignsPerPage + 1}-
+                  {Math.min(currentPage * campaignsPerPage, totalCampaigns)} of {totalCampaigns} campaigns
                 </span>
               </div>
-              
+
               <div className="flex items-center">
                 <button
                   onClick={handlePrevPage}
@@ -478,7 +465,7 @@ export default function MessagingPage() {
                 >
                   <ChevronLeft className="h-5 w-5" />
                 </button>
-                
+
                 <div className="flex items-center gap-1 px-2">
                   {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
                     <button
@@ -495,7 +482,7 @@ export default function MessagingPage() {
                     </button>
                   ))}
                 </div>
-                
+
                 <button
                   onClick={handleNextPage}
                   disabled={currentPage === totalPages}
@@ -543,8 +530,6 @@ export default function MessagingPage() {
           onOpenChange={setShowCampaignDetails}
           campaign={selectedCampaign}
         />
-
-     
       </div>
     </div>
   );

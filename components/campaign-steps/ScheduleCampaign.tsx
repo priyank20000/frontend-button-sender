@@ -73,7 +73,7 @@ export default function ScheduleCampaign({
             <Input
               type="number"
               value={delayRange.start}
-              onChange={(e) => setDelayRange(prev => ({ ...prev, start: parseInt(e.target.value) || 0 }))}
+              onChange={(e) => setDelayRange({ ...delayRange, start: parseInt(e.target.value) || 0 })}
               className="bg-zinc-800 border-zinc-700 text-zinc-200"
               min="1"
             />
@@ -83,7 +83,7 @@ export default function ScheduleCampaign({
             <Input
               type="number"
               value={delayRange.end}
-              onChange={(e) => setDelayRange(prev => ({ ...prev, end: parseInt(e.target.value) || 0 }))}
+              onChange={(e) => setDelayRange({ ...delayRange, end: parseInt(e.target.value) || 0 })}
               className="bg-zinc-800 border-zinc-700 text-zinc-200"
               min="1"
             />

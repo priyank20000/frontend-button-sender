@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Check, ArrowLeft, ArrowRight } from 'lucide-react';
@@ -68,6 +68,26 @@ export default function CreateCampaignDialog({
 }: CreateCampaignDialogProps) {
   const [currentStep, setCurrentStep] = useState(1);
 
+  // Reset all states when dialog opens
+  useEffect(() => {
+    if (open) {
+      // Reset to first step
+      setCurrentStep(1);
+      
+      // Reset all form data
+      setCampaignName('');
+      setSelectedInstances([]);
+      setSelectedTemplate('');
+      setDelayRange({ start: 3, end: 5 });
+      setAntdContacts([]);
+      setRecipients([{
+        phone: '',
+        name: '',
+        variables: { var1: '', var2: '', var3: '', var4: '', var5: '', var6: '', var7: '', var8: '', var9: '', var10: '' }
+      }]);
+    }
+  }, [open, setCampaignName, setSelectedInstances, setSelectedTemplate, setDelayRange, setAntdContacts, setRecipients]);
+
   const handleNext = () => {
     if (currentStep === 1) {
       if (!campaignName.trim()) {
@@ -99,6 +119,22 @@ export default function CreateCampaignDialog({
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
     }
+  };
+
+  const handleClose = () => {
+    // Reset everything when closing
+    setCurrentStep(1);
+    setCampaignName('');
+    setSelectedInstances([]);
+    setSelectedTemplate('');
+    setDelayRange({ start: 3, end: 5 });
+    setAntdContacts([]);
+    setRecipients([{
+      phone: '',
+      name: '',
+      variables: { var1: '', var2: '', var3: '', var4: '', var5: '', var6: '', var7: '', var8: '', var9: '', var10: '' }
+    }]);
+    onOpenChange(false);
   };
 
   const renderStepContent = () => {
@@ -157,7 +193,7 @@ export default function CreateCampaignDialog({
             instances={instances}
             onSendCampaign={onSendCampaign}
             isSending={isSending}
-            onClose={() => onOpenChange(false)}
+            onClose={handleClose}
             onBack={handleBack}
           />
         );
@@ -167,7 +203,7 @@ export default function CreateCampaignDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="bg-zinc-900 border-zinc-800 text-zinc-200 max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-xl font-semibold">Create New Campaign</DialogTitle>

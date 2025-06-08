@@ -133,7 +133,7 @@ export default function Templates() {
     localStorage.removeItem('token');
     Cookies.remove('user', { path: '/', secure: window.location.protocol === 'https:', sameSite: 'Lax' });
     localStorage.removeItem('user');
-    router.push('/login');
+    router.push('/');
   };
 
   // Fetch templates
@@ -142,7 +142,7 @@ export default function Templates() {
     if (!token) {
       console.warn('No token found in cookie or localStorage, redirecting to login');
       showToast('Please log in to access your templates', 'error');
-      router.push('/login');
+      router.push('/');
       return;
     }
 
@@ -255,7 +255,7 @@ export default function Templates() {
     if (!token) {
       console.warn('No token found in cookie or localStorage, redirecting to login');
       showToast('Please log in to save template', 'error');
-      router.push('/login');
+      router.push('/');
       return;
     }
 
@@ -410,7 +410,7 @@ export default function Templates() {
     if (!token) {
       console.warn('No token found in cookie or localStorage, redirecting to login');
       showToast('Please log in to delete template', 'error');
-      router.push('/login');
+      router.push('/');
       return;
     }
 

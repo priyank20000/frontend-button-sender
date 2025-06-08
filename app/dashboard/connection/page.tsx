@@ -251,14 +251,14 @@ export default function DevicesPage() {
     localStorage.removeItem('user');
     
     // Redirect to login
-    window.location.href = '/login';
+    window.location.href = '/';
   };
 
   const fetchInstances = useCallback(async () => {
     const authToken = getToken();
     if (!authToken) {
       showToast('Please log in to access your devices', 'error');
-      window.location.href = '/login';
+      window.location.href = '/';
       return;
     }
 
@@ -301,7 +301,7 @@ export default function DevicesPage() {
     const authToken = getToken();
     if (!authToken) {
       showToast('Please log in to create an instance', 'error');
-      window.location.href = '/login';
+      window.location.href = '/';
       return;
     }
 
@@ -339,7 +339,7 @@ export default function DevicesPage() {
     const authToken = getToken();
     if (!authToken) {
       showToast('Please log in to view QR code', 'error');
-      window.location.href = '/login';
+      window.location.href = '/';
       return;
     }
 
@@ -390,7 +390,7 @@ export default function DevicesPage() {
     const authToken = getToken();
     if (!authToken) {
       showToast('Please log in to delete instance', 'error');
-      window.location.href = '/login';
+      window.location.href = '/';
       return;
     }
 
@@ -432,7 +432,7 @@ export default function DevicesPage() {
     const authToken = getToken();
     if (!authToken) {
       showToast('Please log in to log out instance', 'error');
-      window.location.href = '/login';
+      window.location.href = '/';
       return;
     }
 
@@ -484,7 +484,7 @@ export default function DevicesPage() {
     const authToken = getToken();
     if (!authToken) {
       showToast('Please log in to edit instance', 'error');
-      window.location.href = '/login';
+      window.location.href = '/';
       return;
     }
 

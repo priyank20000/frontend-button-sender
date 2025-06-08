@@ -149,14 +149,14 @@ export default function MessagingPage() {
     localStorage.removeItem('token');
     Cookies.remove('user', { path: '/', secure: window.location.protocol === 'https:', sameSite: 'Lax' });
     localStorage.removeItem('user');
-    router.push('/login');
+    router.push('/');
   };
 
   // Fetch data
   const fetchData = useCallback(async () => {
     const token = await getToken();
     if (!token) {
-      router.push('/login');
+      router.push('/');
       return;
     }
 
@@ -258,7 +258,7 @@ export default function MessagingPage() {
     const token = await getToken();
     if (!token) {
       showToast('Please log in to delete campaign', 'error');
-      router.push('/login');
+      router.push('/');
       return;
     }
 
@@ -301,7 +301,7 @@ export default function MessagingPage() {
   const handleSendCampaign = async () => {
     const token = await getToken();
     if (!token) {
-      router.push('/login');
+      router.push('/');
       return;
     }
 

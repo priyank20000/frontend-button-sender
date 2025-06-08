@@ -101,14 +101,7 @@ export default function CampaignDetailsDialog({
                 <Label className="text-zinc-400">Total Messages</Label>
                 <p className="text-zinc-200 font-medium">{campaign.totalMessages}</p>
               </div>
-              <div>
-                <Label className="text-zinc-400">Sent</Label>
-                <p className="text-green-400 font-medium">{campaign.sentMessages}</p>
-              </div>
-              <div>
-                <Label className="text-zinc-400">Failed</Label>
-                <p className="text-red-400 font-medium">{campaign.failedMessages}</p>
-              </div>
+             
               <div>
                 <Label className="text-zinc-400">Delay Range</Label>
                 <p className="text-zinc-200">{campaign.delayRange.start}s - {campaign.delayRange.end}s</p>

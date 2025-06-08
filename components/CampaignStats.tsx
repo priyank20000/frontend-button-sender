@@ -20,7 +20,7 @@ export default function CampaignStats({ stats }: CampaignStatsProps) {
       <div className="flex items-center justify-between">
         <div>
           <p className="text-zinc-400 text-base sm:text-lg font-medium">Total</p>
-          <p className="text-3xl sm:text-4xl font-bold text-white">{stats .total}</p>
+          <p className="text-3xl sm:text-4xl font-bold text-white">{stats.total}</p>
         </div>
         <MessageSquare className="h-10 w-10 sm:h-12 sm:w-12 text-blue-500" />
       </div>

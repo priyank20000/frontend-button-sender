@@ -442,7 +442,6 @@ export default function SelectAudience({
               <ul className="text-blue-300 text-sm space-y-1">
                 <li>• Click any cell (Name, Number, or Variables) to edit</li>
                 <li>• Download the sample Excel file for the correct import format</li>
-                <li>• Include country codes (e.g., +1, +91) in phone numbers</li>
               </ul>
             </div>
           </div>

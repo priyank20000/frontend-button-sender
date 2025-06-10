@@ -73,6 +73,7 @@ export default function FinalStep({
   const abortControllerRef = useRef<AbortController | null>(null);
   const isStoppingRef = useRef(false);
   const isResumingRef = useRef(false);
+  const lastProgressUpdateRef = useRef<number>(0);
 
   // Get token for socket connection
   const getToken = useCallback((): string | null => {
@@ -97,9 +98,16 @@ export default function FinalStep({
     }
   });
 
-  // Optimized progress handler
+  // Optimized progress handler with throttling for large numbers
   const handleCampaignProgress = useCallback((data: any) => {
     if (data.campaignId !== currentCampaignId) return;
+
+    // Throttle updates for better performance with large numbers
+    const now = Date.now();
+    if (now - lastProgressUpdateRef.current < 500) { // Update max every 500ms
+      return;
+    }
+    lastProgressUpdateRef.current = now;
 
     // Batch state updates for better performance
     setCampaignProgress(prev => ({
@@ -117,7 +125,7 @@ export default function FinalStep({
       canResume: data.canResume
     }));
 
-    // Update recipient status efficiently
+    // Update recipient status efficiently with batch updates
     if (data.lastRecipient && data.lastMessageStatus) {
       const recipientIndex = antdContacts.findIndex(contact => contact.name === data.lastRecipient);
       if (recipientIndex !== -1) {
@@ -151,6 +159,15 @@ export default function FinalStep({
     // Final count update
     setExistingNumbers(data.sent);
     setNonExistingNumbers(data.notExist || 0);
+    
+    // Final status update for all remaining recipients
+    setCampaignProgress(prev => ({
+      ...prev,
+      status: 'completed',
+      sent: data.sent,
+      failed: data.failed || 0,
+      notExist: data.notExist || 0
+    }));
   }, [currentCampaignId]);
 
   const handleCampaignPaused = useCallback((data: any) => {
@@ -293,7 +310,7 @@ export default function FinalStep({
     }
   };
 
-  // INSTANT STOP/RESUME - 0.1s response time
+  // INSTANT STOP/RESUME with improved error handling
   const handleCampaignControl = useCallback(async (action: 'stop' | 'resume') => {
     if (!currentCampaignId) return;
     
@@ -316,7 +333,10 @@ export default function FinalStep({
     try {
       const authToken = getToken();
       
-      // Fire and forget - don't wait for response
+      // Fire and forget with improved error handling
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
       fetch('https://whatsapp.recuperafly.com/api/template/campaign/control', {
         method: 'POST',
         headers: {
@@ -327,11 +347,16 @@ export default function FinalStep({
           campaignId: currentCampaignId,
           action: action
         }),
-      }).then(response => response.json())
+        signal: controller.signal
+      }).then(response => {
+        clearTimeout(timeoutId);
+        return response.json();
+      })
         .then(result => {
           if (result.status) {
             console.log(`Campaign ${action} signal sent successfully`);
           } else {
+            console.error(`Campaign ${action} failed:`, result.message);
             // Revert UI state if server request failed
             if (action === 'stop') {
               setIsProcessing(true);
@@ -345,16 +370,19 @@ export default function FinalStep({
           }
         })
         .catch(error => {
-          console.error(`Error ${action}ing campaign:`, error);
-          // Revert UI state on error
-          if (action === 'stop') {
-            setIsProcessing(true);
-            setIsPaused(false);
-            isStoppingRef.current = false;
-          } else {
-            setIsProcessing(false);
-            setIsPaused(true);
-            isResumingRef.current = false;
+          clearTimeout(timeoutId);
+          if (error.name !== 'AbortError') {
+            console.error(`Error ${action}ing campaign:`, error);
+            // Revert UI state on error
+            if (action === 'stop') {
+              setIsProcessing(true);
+              setIsPaused(false);
+              isStoppingRef.current = false;
+            } else {
+              setIsProcessing(false);
+              setIsPaused(true);
+              isResumingRef.current = false;
+            }
           }
         });
 
@@ -477,15 +505,19 @@ export default function FinalStep({
                       'Processing messages...'
                     }
                   </p>
+                  <p className="text-blue-200 text-sm mt-1">
+                    Progress: {campaignProgress.sent + (campaignProgress.failed || 0) + (campaignProgress.notExist || 0)} / {campaignProgress.total}
+                  </p>
                 </div>
               </div>
               <Button
                 onClick={handleStopCampaign}
                 variant="outline"
                 className="bg-red-600/20 border-red-500 text-red-400 hover:bg-red-600/30 transition-all duration-75"
+                disabled={isStoppingRef.current}
               >
                 <StopCircle className="h-4 w-4 mr-2" />
-                Stop
+                {isStoppingRef.current ? 'Stopping...' : 'Stop'}
               </Button>
             </div>
           </CardContent>
@@ -501,15 +533,19 @@ export default function FinalStep({
                 <div>
                   <h3 className="text-yellow-400 font-semibold text-lg">Campaign Paused</h3>
                   <p className="text-yellow-300">Campaign has been paused. Click resume to continue.</p>
+                  <p className="text-yellow-200 text-sm mt-1">
+                    Progress: {campaignProgress.sent + (campaignProgress.failed || 0) + (campaignProgress.notExist || 0)} / {campaignProgress.total}
+                  </p>
                 </div>
               </div>
               <Button
                 onClick={handleResumeCampaign}
                 variant="outline"
                 className="bg-green-600/20 border-green-500 text-green-400 hover:bg-green-600/30 transition-all duration-75"
+                disabled={isResumingRef.current}
               >
                 <Play className="h-4 w-4 mr-2" />
-                Resume
+                {isResumingRef.current ? 'Resuming...' : 'Resume'}
               </Button>
             </div>
           </CardContent>

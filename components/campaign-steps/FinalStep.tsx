@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Send, Loader2, CheckCircle, ArrowLeft, ChevronLeft, ChevronRight, Clock, MessageSquare } from 'lucide-react';
+import { Send, Loader2, CheckCircle, ArrowLeft, ChevronLeft, ChevronRight, Clock, MessageSquare, Pause, Play, StopCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useSocket } from "../../hooks/useSocket";
 import Cookies from 'js-cookie';
@@ -27,10 +27,14 @@ interface CampaignProgress {
   campaignId: string;
   total: number;
   sent: number;
-  status: 'processing' | 'completed'| 'pending';
+  failed?: number;
+  notExist?: number;
+  status: 'processing' | 'completed' | 'pending' | 'paused';
   currentRecipient?: string;
-  lastMessageStatus?: 'sent' | 'completed';
+  lastMessageStatus?: 'sent' | 'failed' | 'not_exist';
   lastRecipient?: string;
+  canStop?: boolean;
+  canResume?: boolean;
 }
 
 export default function FinalStep({
@@ -50,10 +54,20 @@ export default function FinalStep({
   const [isCompleted, setIsCompleted] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [recipientsPerPage] = useState(10);
-  const [campaignProgress, setCampaignProgress] = useState<CampaignProgress>({ campaignId: '', total: antdContacts.length, sent: 0, status: 'pending' });
+  const [campaignProgress, setCampaignProgress] = useState<CampaignProgress>({ 
+    campaignId: '', 
+    total: antdContacts.length, 
+    sent: 0, 
+    failed: 0,
+    notExist: 0,
+    status: 'pending' 
+  });
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [currentCampaignId, setCurrentCampaignId] = useState<string | null>(null);
   const [recipientStatuses, setRecipientStatuses] = useState<string[]>(new Array(antdContacts.length).fill('pending'));
+  const [existingNumbers, setExistingNumbers] = useState(0);
+  const [nonExistingNumbers, setNonExistingNumbers] = useState(0);
   const router = useRouter();
 
   // Get token for socket connection
@@ -66,7 +80,7 @@ export default function FinalStep({
   const token = getToken();
 
   // Socket connection for real-time updates
-  const { on, off, isConnected } = useSocket({
+  const { on, off, isConnected, emit } = useSocket({
     token,
     onConnect: () => {
       console.log('Socket connected for campaign tracking');
@@ -89,10 +103,14 @@ export default function FinalStep({
           campaignId: data.campaignId,
           total: data.total,
           sent: data.sent,
+          failed: data.failed || 0,
+          notExist: data.notExist || 0,
           status: data.status,
           currentRecipient: data.currentRecipient,
           lastMessageStatus: data.lastMessageStatus,
-          lastRecipient: data.lastRecipient
+          lastRecipient: data.lastRecipient,
+          canStop: data.canStop,
+          canResume: data.canResume
         });
 
         // Update recipient status based on lastMessageStatus
@@ -107,10 +125,17 @@ export default function FinalStep({
           }
         }
 
+        // Update existing/non-existing counts
+        const existing = data.sent;
+        const nonExisting = data.notExist || 0;
+        setExistingNumbers(existing);
+        setNonExistingNumbers(nonExisting);
+
         // Check if campaign is completed
         if (data.status === 'completed') {
           setIsProcessing(false);
           setIsCompleted(true);
+          setIsPaused(false);
         }
       }
     };
@@ -119,15 +144,50 @@ export default function FinalStep({
       if (data.campaignId === currentCampaignId) {
         setIsProcessing(false);
         setIsCompleted(true);
+        setIsPaused(false);
+        
+        // Final count update
+        setExistingNumbers(data.sent);
+        setNonExistingNumbers(data.notExist || 0);
+      }
+    };
+
+    const handleCampaignPaused = (data: any) => {
+      if (data.campaignId === currentCampaignId) {
+        setIsPaused(true);
+        setIsProcessing(false);
+        setCampaignProgress(prev => ({
+          ...prev,
+          status: 'paused',
+          canStop: data.canStop,
+          canResume: data.canResume
+        }));
+      }
+    };
+
+    const handleCampaignResumed = (data: any) => {
+      if (data.campaignId === currentCampaignId) {
+        setIsPaused(false);
+        setIsProcessing(true);
+        setCampaignProgress(prev => ({
+          ...prev,
+          status: 'processing',
+          canStop: data.canStop,
+          canResume: data.canResume
+        }));
       }
     };
 
     on('campaign.progress', handleCampaignProgress);
     on('campaign.complete', handleCampaignComplete);
+    on('campaign.paused', handleCampaignPaused);
+    on('campaign.resumed', handleCampaignResumed);
 
     return () => {
       off('campaign.progress', handleCampaignProgress);
       off('campaign.complete', handleCampaignComplete);
+      off('campaign.paused', handleCampaignPaused);
+      off('campaign.resumed', handleCampaignResumed);
     };
   }, [isConnected, currentCampaignId, on, off, antdContacts]);
 
@@ -135,7 +195,10 @@ export default function FinalStep({
     setIsLoading(true);
     setIsProcessing(true);
     setIsCompleted(false);
+    setIsPaused(false);
     setRecipientStatuses(new Array(antdContacts.length).fill('pending'));
+    setExistingNumbers(0);
+    setNonExistingNumbers(0);
     
     try {
       const authToken = getToken();
@@ -194,6 +257,8 @@ export default function FinalStep({
         campaignId: result.campaignId || 'unknown',
         total: antdContacts.length,
         sent: 0,
+        failed: 0,
+        notExist: 0,
         status: 'processing'
       });
 
@@ -206,6 +271,35 @@ export default function FinalStep({
       setIsLoading(false);
     }
   };
+
+  const handleCampaignControl = async (action: 'stop' | 'resume') => {
+    if (!currentCampaignId) return;
+
+    try {
+      const authToken = getToken();
+      const response = await fetch('https://whatsapp.recuperafly.com/api/template/campaign/control', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          campaignId: currentCampaignId,
+          action: action
+        }),
+      });
+
+      const result = await response.json();
+      if (result.status) {
+        console.log(`Campaign ${action} signal sent successfully`);
+      }
+    } catch (error) {
+      console.error(`Error ${action}ing campaign:`, error);
+    }
+  };
+
+  const handleStopCampaign = () => handleCampaignControl('stop');
+  const handleResumeCampaign = () => handleCampaignControl('resume');
 
   const handleComplete = () => {
     onClose();
@@ -233,7 +327,7 @@ export default function FinalStep({
 
   const getProgressPercentage = () => {
     if (campaignProgress.total === 0) return 0;
-    return Math.round((campaignProgress.sent / campaignProgress.total) * 100);
+    return Math.round(((campaignProgress.sent + (campaignProgress.failed || 0) + (campaignProgress.notExist || 0)) / campaignProgress.total) * 100);
   };
 
   return (
@@ -243,6 +337,105 @@ export default function FinalStep({
         <p className="text-zinc-400 mb-6">Review your campaign details and send messages to all selected numbers.</p>
       </div>
 
+      {/* Progress Stats */}
+      {(isProcessing || isPaused || isCompleted) && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <Card className="bg-blue-500/10 border-blue-500/20">
+            <CardContent className="p-4">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-blue-400">{existingNumbers}</div>
+                <div className="text-sm text-blue-300">Existing Numbers</div>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card className="bg-red-500/10 border-red-500/20">
+            <CardContent className="p-4">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-red-400">{nonExistingNumbers}</div>
+                <div className="text-sm text-red-300">Non-Existing Numbers</div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-green-500/10 border-green-500/20">
+            <CardContent className="p-4">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-400">{campaignProgress.sent}</div>
+                <div className="text-sm text-green-300">Messages Sent</div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-zinc-500/10 border-zinc-500/20">
+            <CardContent className="p-4">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-zinc-400">{getProgressPercentage()}%</div>
+                <div className="text-sm text-zinc-300">Progress</div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Campaign Status */}
+      {isProcessing && (
+        <Card className="bg-blue-500/10 border-blue-500/20">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Loader2 className="h-8 w-8 text-blue-500 animate-spin" />
+                <div>
+                  <h3 className="text-blue-400 font-semibold text-lg">Campaign Running</h3>
+                  <p className="text-blue-300">
+                    {campaignProgress.currentRecipient ? 
+                      `Currently sending to: ${campaignProgress.currentRecipient}` : 
+                      'Processing messages...'
+                    }
+                  </p>
+                </div>
+              </div>
+              {campaignProgress.canStop && (
+                <Button
+                  onClick={handleStopCampaign}
+                  variant="outline"
+                  className="bg-red-600/20 border-red-500 text-red-400 hover:bg-red-600/30"
+                >
+                  <Pause className="h-4 w-4 mr-2" />
+                  Stop
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {isPaused && (
+        <Card className="bg-yellow-500/10 border-yellow-500/20">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Pause className="h-8 w-8 text-yellow-500" />
+                <div>
+                  <h3 className="text-yellow-400 font-semibold text-lg">Campaign Paused</h3>
+                  <p className="text-yellow-300">Campaign has been paused. Click resume to continue.</p>
+                </div>
+              </div>
+              {campaignProgress.canResume && (
+                <Button
+                  onClick={handleResumeCampaign}
+                  variant="outline"
+                  className="bg-green-600/20 border-green-500 text-green-400 hover:bg-green-600/30"
+                >
+                  <Play className="h-4 w-4 mr-2" />
+                  Resume
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Completion Message */}
       {isCompleted && (
         <Card className="bg-green-500/10 border-green-500/20">
@@ -251,7 +444,9 @@ export default function FinalStep({
               <CheckCircle className="h-8 w-8 text-green-500" />
               <div>
                 <h3 className="text-green-400 font-semibold text-lg">Campaign Completed!</h3>
-                <p className="text-green-300">All messages have been sent successfully.</p>
+                <p className="text-green-300">
+                  Sent: {campaignProgress.sent} | Failed: {campaignProgress.failed || 0} | Not on WhatsApp: {campaignProgress.notExist || 0}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -271,7 +466,7 @@ export default function FinalStep({
                   <TableHead className="text-zinc-400">SN</TableHead>
                   <TableHead className="text-zinc-400">Name</TableHead>
                   <TableHead className="text-zinc-400">Phone</TableHead>
-                  {(isProcessing || isCompleted) && (
+                  {(isProcessing || isPaused || isCompleted) && (
                     <TableHead className="text-zinc-400">Status</TableHead>
                   )}
                 </TableRow>
@@ -288,15 +483,18 @@ export default function FinalStep({
                       </TableCell>
                       <TableCell className="text-zinc-200 font-medium">{contact.name}</TableCell>
                       <TableCell className="text-zinc-200">{contact.number}</TableCell>
-                      {(isProcessing || isCompleted) && (
+                      {(isProcessing || isPaused || isCompleted) && (
                         <TableCell>
                           <span className={`text-xs px-2 py-1 rounded-full ${
-                            recipientStatus === 'sent' || recipientStatus === 'completed' ? 'bg-green-500/10 text-green-400' :
+                            recipientStatus === 'sent' ? 'bg-green-500/10 text-green-400' :
                             recipientStatus === 'failed' ? 'bg-red-500/10 text-red-400' :
+                            recipientStatus === 'not_exist' ? 'bg-orange-500/10 text-orange-400' :
                             'bg-zinc-500/10 text-zinc-400'
                           }`}>
-                            {recipientStatus === 'sent' || recipientStatus === 'completed' ? 'Sent' :
-                             recipientStatus === 'failed' ? 'Failed' : 'Pending'}
+                            {recipientStatus === 'sent' ? 'Sent' :
+                             recipientStatus === 'failed' ? 'Failed' :
+                             recipientStatus === 'not_exist' ? 'Not on WhatsApp' :
+                             'Pending'}
                           </span>
                         </TableCell>
                       )}
@@ -403,7 +601,7 @@ export default function FinalStep({
         </div>
         
         <div className="flex gap-3">
-          {!isCompleted && !isProcessing && (
+          {!isCompleted && !isProcessing && !isPaused && (
             <Button
               onClick={handleSendMessages}
               disabled={isLoading || isSending}
@@ -430,6 +628,16 @@ export default function FinalStep({
             >
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
               Processing...
+            </Button>
+          )}
+
+          {isPaused && (
+            <Button
+              disabled
+              className="bg-yellow-600/50 text-white cursor-not-allowed"
+            >
+              <Pause className="h-4 w-4 mr-2" />
+              Paused
             </Button>
           )}
           

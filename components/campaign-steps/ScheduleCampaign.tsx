@@ -44,7 +44,7 @@ export default function ScheduleCampaign({
           <div>
             <Label className="text-zinc-400">Selected Template</Label>
             <p className="text-zinc-200 font-medium">
-              {templates.find(t => t._id === selectedTemplate)?.name || 'N/A'}
+             1 template
             </p>
           </div>
           <div>
@@ -54,13 +54,10 @@ export default function ScheduleCampaign({
             </p>
           </div>
           <div>
-            <Label className="text-zinc-400">Total Recipients</Label>
-            <p className="text-zinc-200 font-medium">{antdContacts.length} recipients</p>
-          </div>
-          <div>
             <Label className="text-zinc-400">Total Messages</Label>
-            <p className="text-zinc-200 font-medium">{antdContacts.length * selectedInstances.length} messages</p>
+            <p className="text-zinc-200 font-medium">{antdContacts.length} message</p>
           </div>
+ 
         </div>
       </div>
 

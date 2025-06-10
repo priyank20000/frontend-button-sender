@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -68,14 +68,19 @@ export default function FinalStep({
   const [recipientStatuses, setRecipientStatuses] = useState<string[]>(new Array(antdContacts.length).fill('pending'));
   const [existingNumbers, setExistingNumbers] = useState(0);
   const [nonExistingNumbers, setNonExistingNumbers] = useState(0);
+  
   const router = useRouter();
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const isStoppingRef = useRef(false);
+  const isResumingRef = useRef(false);
+  const lastProgressUpdateRef = useRef<number>(0);
 
   // Get token for socket connection
-  const getToken = (): string | null => {
+  const getToken = useCallback((): string | null => {
     const cookieToken = Cookies.get('token');
     if (cookieToken) return cookieToken;
     return localStorage.getItem('token');
-  };
+  }, []);
 
   const token = getToken();
 
@@ -93,90 +98,109 @@ export default function FinalStep({
     }
   });
 
+  // Optimized progress handler with throttling for large numbers
+  const handleCampaignProgress = useCallback((data: any) => {
+    if (data.campaignId !== currentCampaignId) return;
+
+    // Throttle updates for better performance with large numbers
+    const now = Date.now();
+    if (now - lastProgressUpdateRef.current < 500) { // Update max every 500ms
+      return;
+    }
+    lastProgressUpdateRef.current = now;
+
+    // Batch state updates for better performance
+    setCampaignProgress(prev => ({
+      ...prev,
+      campaignId: data.campaignId,
+      total: data.total,
+      sent: data.sent,
+      failed: data.failed || 0,
+      notExist: data.notExist || 0,
+      status: data.status,
+      currentRecipient: data.currentRecipient,
+      lastMessageStatus: data.lastMessageStatus,
+      lastRecipient: data.lastRecipient,
+      canStop: data.canStop,
+      canResume: data.canResume
+    }));
+
+    // Update recipient status efficiently with batch updates
+    if (data.lastRecipient && data.lastMessageStatus) {
+      const recipientIndex = antdContacts.findIndex(contact => contact.name === data.lastRecipient);
+      if (recipientIndex !== -1) {
+        setRecipientStatuses(prev => {
+          const newStatuses = [...prev];
+          newStatuses[recipientIndex] = data.lastMessageStatus;
+          return newStatuses;
+        });
+      }
+    }
+
+    // Update counts
+    setExistingNumbers(data.sent);
+    setNonExistingNumbers(data.notExist || 0);
+
+    // Update state flags
+    if (data.status === 'completed') {
+      setIsProcessing(false);
+      setIsCompleted(true);
+      setIsPaused(false);
+    }
+  }, [currentCampaignId, antdContacts]);
+
+  const handleCampaignComplete = useCallback((data: any) => {
+    if (data.campaignId !== currentCampaignId) return;
+    
+    setIsProcessing(false);
+    setIsCompleted(true);
+    setIsPaused(false);
+    
+    // Final count update
+    setExistingNumbers(data.sent);
+    setNonExistingNumbers(data.notExist || 0);
+    
+    // Final status update for all remaining recipients
+    setCampaignProgress(prev => ({
+      ...prev,
+      status: 'completed',
+      sent: data.sent,
+      failed: data.failed || 0,
+      notExist: data.notExist || 0
+    }));
+  }, [currentCampaignId]);
+
+  const handleCampaignPaused = useCallback((data: any) => {
+    if (data.campaignId !== currentCampaignId) return;
+    
+    setIsPaused(true);
+    setIsProcessing(false);
+    isStoppingRef.current = false; // Reset stopping flag
+    setCampaignProgress(prev => ({
+      ...prev,
+      status: 'paused',
+      canStop: data.canStop,
+      canResume: data.canResume
+    }));
+  }, [currentCampaignId]);
+
+  const handleCampaignResumed = useCallback((data: any) => {
+    if (data.campaignId !== currentCampaignId) return;
+    
+    setIsPaused(false);
+    setIsProcessing(true);
+    isResumingRef.current = false; // Reset resuming flag
+    setCampaignProgress(prev => ({
+      ...prev,
+      status: 'processing',
+      canStop: data.canStop,
+      canResume: data.canResume
+    }));
+  }, [currentCampaignId]);
+
   // Listen for campaign progress updates
   useEffect(() => {
     if (!isConnected || !currentCampaignId) return;
-
-    const handleCampaignProgress = (data: any) => {
-      if (data.campaignId === currentCampaignId) {
-        setCampaignProgress({
-          campaignId: data.campaignId,
-          total: data.total,
-          sent: data.sent,
-          failed: data.failed || 0,
-          notExist: data.notExist || 0,
-          status: data.status,
-          currentRecipient: data.currentRecipient,
-          lastMessageStatus: data.lastMessageStatus,
-          lastRecipient: data.lastRecipient,
-          canStop: data.canStop,
-          canResume: data.canResume
-        });
-
-        // Update recipient status based on lastMessageStatus
-        if (data.lastRecipient && data.lastMessageStatus) {
-          const recipientIndex = antdContacts.findIndex(contact => contact.name === data.lastRecipient);
-          if (recipientIndex !== -1) {
-            setRecipientStatuses(prev => {
-              const newStatuses = [...prev];
-              newStatuses[recipientIndex] = data.lastMessageStatus;
-              return newStatuses;
-            });
-          }
-        }
-
-        // Update existing/non-existing counts
-        const existing = data.sent;
-        const nonExisting = data.notExist || 0;
-        setExistingNumbers(existing);
-        setNonExistingNumbers(nonExisting);
-
-        // Check if campaign is completed
-        if (data.status === 'completed') {
-          setIsProcessing(false);
-          setIsCompleted(true);
-          setIsPaused(false);
-        }
-      }
-    };
-
-    const handleCampaignComplete = (data: any) => {
-      if (data.campaignId === currentCampaignId) {
-        setIsProcessing(false);
-        setIsCompleted(true);
-        setIsPaused(false);
-        
-        // Final count update
-        setExistingNumbers(data.sent);
-        setNonExistingNumbers(data.notExist || 0);
-      }
-    };
-
-    const handleCampaignPaused = (data: any) => {
-      if (data.campaignId === currentCampaignId) {
-        setIsPaused(true);
-        setIsProcessing(false);
-        setCampaignProgress(prev => ({
-          ...prev,
-          status: 'paused',
-          canStop: data.canStop,
-          canResume: data.canResume
-        }));
-      }
-    };
-
-    const handleCampaignResumed = (data: any) => {
-      if (data.campaignId === currentCampaignId) {
-        setIsPaused(false);
-        setIsProcessing(true);
-        setCampaignProgress(prev => ({
-          ...prev,
-          status: 'processing',
-          canStop: data.canStop,
-          canResume: data.canResume
-        }));
-      }
-    };
 
     on('campaign.progress', handleCampaignProgress);
     on('campaign.complete', handleCampaignComplete);
@@ -189,9 +213,18 @@ export default function FinalStep({
       off('campaign.paused', handleCampaignPaused);
       off('campaign.resumed', handleCampaignResumed);
     };
-  }, [isConnected, currentCampaignId, on, off, antdContacts]);
+  }, [isConnected, currentCampaignId, on, off, handleCampaignProgress, handleCampaignComplete, handleCampaignPaused, handleCampaignResumed]);
 
   const handleSendMessages = async () => {
+    // Prevent multiple simultaneous requests
+    if (isLoading || isProcessing) return;
+
+    // Cancel any previous request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    abortControllerRef.current = new AbortController();
+
     setIsLoading(true);
     setIsProcessing(true);
     setIsCompleted(false);
@@ -236,6 +269,7 @@ export default function FinalStep({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
+        signal: abortControllerRef.current.signal
       });
 
       if (response.status === 401) {
@@ -262,22 +296,48 @@ export default function FinalStep({
         status: 'processing'
       });
 
-    } catch (err) {
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        console.log('Request was aborted');
+        return;
+      }
+      
       console.error('Error sending campaign:', err);
       setIsProcessing(false);
-      setIsLoading(false);
       // Handle error (you might want to show an error toast here)
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleCampaignControl = async (action: 'stop' | 'resume') => {
+  // INSTANT STOP/RESUME with improved error handling
+  const handleCampaignControl = useCallback(async (action: 'stop' | 'resume') => {
     if (!currentCampaignId) return;
+    
+    // Prevent multiple simultaneous control actions
+    if (action === 'stop' && isStoppingRef.current) return;
+    if (action === 'resume' && isResumingRef.current) return;
 
+    // INSTANT UI UPDATE - No waiting for server response
+    if (action === 'stop') {
+      isStoppingRef.current = true;
+      setIsProcessing(false);
+      setIsPaused(true);
+    } else {
+      isResumingRef.current = true;
+      setIsProcessing(true);
+      setIsPaused(false);
+    }
+
+    // Send request in background without blocking UI
     try {
       const authToken = getToken();
-      const response = await fetch('https://whatsapp.recuperafly.com/api/template/campaign/control', {
+      
+      // Fire and forget with improved error handling
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
+      fetch('https://whatsapp.recuperafly.com/api/template/campaign/control', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${authToken}`,
@@ -287,25 +347,77 @@ export default function FinalStep({
           campaignId: currentCampaignId,
           action: action
         }),
-      });
+        signal: controller.signal
+      }).then(response => {
+        clearTimeout(timeoutId);
+        return response.json();
+      })
+        .then(result => {
+          if (result.status) {
+            console.log(`Campaign ${action} signal sent successfully`);
+          } else {
+            console.error(`Campaign ${action} failed:`, result.message);
+            // Revert UI state if server request failed
+            if (action === 'stop') {
+              setIsProcessing(true);
+              setIsPaused(false);
+              isStoppingRef.current = false;
+            } else {
+              setIsProcessing(false);
+              setIsPaused(true);
+              isResumingRef.current = false;
+            }
+          }
+        })
+        .catch(error => {
+          clearTimeout(timeoutId);
+          if (error.name !== 'AbortError') {
+            console.error(`Error ${action}ing campaign:`, error);
+            // Revert UI state on error
+            if (action === 'stop') {
+              setIsProcessing(true);
+              setIsPaused(false);
+              isStoppingRef.current = false;
+            } else {
+              setIsProcessing(false);
+              setIsPaused(true);
+              isResumingRef.current = false;
+            }
+          }
+        });
 
-      const result = await response.json();
-      if (result.status) {
-        console.log(`Campaign ${action} signal sent successfully`);
-      }
     } catch (error) {
       console.error(`Error ${action}ing campaign:`, error);
+      // Revert UI state on error
+      if (action === 'stop') {
+        setIsProcessing(true);
+        setIsPaused(false);
+        isStoppingRef.current = false;
+      } else {
+        setIsProcessing(false);
+        setIsPaused(true);
+        isResumingRef.current = false;
+      }
     }
-  };
+  }, [currentCampaignId, getToken]);
 
-  const handleStopCampaign = () => handleCampaignControl('stop');
-  const handleResumeCampaign = () => handleCampaignControl('resume');
+  const handleStopCampaign = useCallback(() => handleCampaignControl('stop'), [handleCampaignControl]);
+  const handleResumeCampaign = useCallback(() => handleCampaignControl('resume'), [handleCampaignControl]);
 
   const handleComplete = () => {
     onClose();
     // Refresh the messaging page data when navigating back
     router.push('/dashboard/messaging?refresh=true');
   };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
   const totalRecipients = antdContacts.length;
   const totalPages = Math.ceil(totalRecipients / recipientsPerPage);
@@ -393,18 +505,20 @@ export default function FinalStep({
                       'Processing messages...'
                     }
                   </p>
+                  <p className="text-blue-200 text-sm mt-1">
+                    Progress: {campaignProgress.sent + (campaignProgress.failed || 0) + (campaignProgress.notExist || 0)} / {campaignProgress.total}
+                  </p>
                 </div>
               </div>
-              {campaignProgress.canStop && (
-                <Button
-                  onClick={handleStopCampaign}
-                  variant="outline"
-                  className="bg-red-600/20 border-red-500 text-red-400 hover:bg-red-600/30"
-                >
-                  <Pause className="h-4 w-4 mr-2" />
-                  Stop
-                </Button>
-              )}
+              <Button
+                onClick={handleStopCampaign}
+                variant="outline"
+                className="bg-red-600/20 border-red-500 text-red-400 hover:bg-red-600/30 transition-all duration-75"
+                disabled={isStoppingRef.current}
+              >
+                <StopCircle className="h-4 w-4 mr-2" />
+                {isStoppingRef.current ? 'Stopping...' : 'Stop'}
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -419,18 +533,20 @@ export default function FinalStep({
                 <div>
                   <h3 className="text-yellow-400 font-semibold text-lg">Campaign Paused</h3>
                   <p className="text-yellow-300">Campaign has been paused. Click resume to continue.</p>
+                  <p className="text-yellow-200 text-sm mt-1">
+                    Progress: {campaignProgress.sent + (campaignProgress.failed || 0) + (campaignProgress.notExist || 0)} / {campaignProgress.total}
+                  </p>
                 </div>
               </div>
-              {campaignProgress.canResume && (
-                <Button
-                  onClick={handleResumeCampaign}
-                  variant="outline"
-                  className="bg-green-600/20 border-green-500 text-green-400 hover:bg-green-600/30"
-                >
-                  <Play className="h-4 w-4 mr-2" />
-                  Resume
-                </Button>
-              )}
+              <Button
+                onClick={handleResumeCampaign}
+                variant="outline"
+                className="bg-green-600/20 border-green-500 text-green-400 hover:bg-green-600/30 transition-all duration-75"
+                disabled={isResumingRef.current}
+              >
+                <Play className="h-4 w-4 mr-2" />
+                {isResumingRef.current ? 'Resuming...' : 'Resume'}
+              </Button>
             </div>
           </CardContent>
         </Card>
@@ -584,7 +700,7 @@ export default function FinalStep({
               variant="outline"
               onClick={onBack}
               disabled={isLoading || isProcessing}
-              className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
+              className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back
@@ -594,7 +710,7 @@ export default function FinalStep({
             variant="outline"
             onClick={onClose}
             disabled={isLoading || isProcessing}
-            className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
+            className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
           >
             Cancel
           </Button>
@@ -605,7 +721,7 @@ export default function FinalStep({
             <Button
               onClick={handleSendMessages}
               disabled={isLoading || isSending}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
+              className="bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading || isSending ? (
                 <>

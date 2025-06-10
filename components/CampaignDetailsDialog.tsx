@@ -48,9 +48,8 @@ export default function CampaignDetailsDialog({
   const isStoppingRef = useRef(false);
   const isResumingRef = useRef(false);
   const lastProgressUpdateRef = useRef<number>(0);
-  const hasLoadedDetailsRef = useRef(false); // Track if details have been loaded
+  const hasLoadedDetailsRef = useRef(false);
 
-  // Get token for socket connection
   const getToken = useCallback((): string | null => {
     const cookieToken = Cookies.get('token');
     if (cookieToken) return cookieToken;
@@ -59,7 +58,6 @@ export default function CampaignDetailsDialog({
 
   const token = getToken();
 
-  // Socket connection for real-time updates
   const { on, off, isConnected } = useSocket({
     token,
     onConnect: () => console.log('Socket connected for campaign details'),
@@ -67,9 +65,45 @@ export default function CampaignDetailsDialog({
     onError: (error) => console.error('Socket error:', error),
   });
 
-  // Load detailed campaign data
+  // Function to update recipient statuses based on campaign statistics
+  const updateRecipientStatuses = useCallback((campaign: Campaign) => {
+    if (!campaign.recipients) return [];
+
+    const statuses = new Array(campaign.recipients.length).fill('pending');
+    const sentCount = campaign.statistics?.sent || campaign.sentMessages || 0;
+    const failedCount = campaign.statistics?.failed || campaign.failedMessages || 0;
+    const notExistCount = campaign.statistics?.notExist || campaign.notExistMessages || 0;
+
+    // Assign statuses based on the campaign's statistics
+    let index = 0;
+
+    // Sent messages
+    for (let i = 0; i < sentCount && index < statuses.length; i++, index++) {
+      statuses[index] = 'sent';
+    }
+
+    // Failed messages
+    for (let i = 0; i < failedCount && index < statuses.length; i++, index++) {
+      statuses[index] = 'failed';
+    }
+
+    // Not on WhatsApp (not_exist) messages
+    for (let i = 0; i < notExistCount && index < statuses.length; i++, index++) {
+      statuses[index] = 'not_exist';
+    }
+
+    // Override with individual recipient status if available
+    campaign.recipients.forEach((recipient: any, idx: number) => {
+      if (recipient.status) {
+        statuses[idx] = recipient.status === 'not_exist' ? 'not_exist' : recipient.status;
+      }
+    });
+
+    return statuses;
+  }, []);
+
   const loadCampaignDetails = useCallback(async (campaignId: string) => {
-    if (!token || hasLoadedDetailsRef.current) return; // Prevent multiple calls
+    if (!token || hasLoadedDetailsRef.current) return;
 
     setIsLoadingDetails(true);
     try {
@@ -99,28 +133,13 @@ export default function CampaignDetailsDialog({
             notExistMessages: detailedCampaign.statistics?.notExist || 0,
           }));
 
-          // Initialize recipient statuses
-          if (detailedCampaign.recipients) {
-            const statuses = new Array(detailedCampaign.recipients.length).fill('pending');
-            detailedCampaign.recipients.forEach((recipient: any, index: number) => {
-              if (recipient.status) {
-                statuses[index] = recipient.status;
-              } else if (detailedCampaign.status === 'completed') {
-                if (index < (detailedCampaign.statistics?.sent || 0)) {
-                  statuses[index] = 'sent';
-                } else if (index < (detailedCampaign.statistics?.sent || 0) + (detailedCampaign.statistics?.failed || 0)) {
-                  statuses[index] = 'failed';
-                } else {
-                  statuses[index] = 'not_exist';
-                }
-              }
-            });
-            setRecipientStatuses(statuses);
-          }
+          // Update recipient statuses based on detailed campaign data
+          const statuses = updateRecipientStatuses(detailedCampaign);
+          setRecipientStatuses(statuses);
 
           setIsPaused(detailedCampaign.status === 'paused');
           setIsProcessing(detailedCampaign.status === 'processing');
-          hasLoadedDetailsRef.current = true; // Mark as loaded
+          hasLoadedDetailsRef.current = true;
         }
       } else {
         console.error('Failed to load campaign details:', response.status);
@@ -130,9 +149,8 @@ export default function CampaignDetailsDialog({
     } finally {
       setIsLoadingDetails(false);
     }
-  }, [token]);
+  }, [token, updateRecipientStatuses]);
 
-  // Load campaign details only when dialog opens and campaign changes
   useEffect(() => {
     if (campaign && open && !hasLoadedDetailsRef.current) {
       setCampaignData(campaign);
@@ -142,13 +160,12 @@ export default function CampaignDetailsDialog({
     }
   }, [campaign, open, loadCampaignDetails]);
 
-  // Handle campaign progress updates via WebSocket
   const handleCampaignProgress = useCallback(
     (data: any) => {
       if (!campaignData || data.campaignId !== campaignData._id) return;
 
       const now = Date.now();
-      if (now - lastProgressUpdateRef.current < 500) return; // Throttle updates
+      if (now - lastProgressUpdateRef.current < 500) return;
       lastProgressUpdateRef.current = now;
 
       console.log('Campaign progress update:', data);
@@ -211,17 +228,30 @@ export default function CampaignDetailsDialog({
       setIsProcessing(false);
       setIsPaused(false);
 
+      // Update statuses on campaign completion
       setRecipientStatuses((prev) => {
         const newStatuses = [...prev];
-        for (let i = 0; i < data.sent; i++) {
-          if (i < newStatuses.length) newStatuses[i] = 'sent';
+        const sentCount = data.sent || 0;
+        const failedCount = data.failed || 0;
+        const notExistCount = data.notExist || 0;
+
+        let index = 0;
+
+        // Sent messages
+        for (let i = 0; i < sentCount && index < newStatuses.length; i++, index++) {
+          newStatuses[index] = 'sent';
         }
-        for (let i = data.sent; i < data.sent + (data.failed || 0); i++) {
-          if (i < newStatuses.length) newStatuses[i] = 'failed';
+
+        // Failed messages
+        for (let i = 0; i < failedCount && index < newStatuses.length; i++, index++) {
+          newStatuses[index] = 'failed';
         }
-        for (let i = data.sent + (data.failed || 0); i < data.sent + (data.failed || 0) + (data.notExist || 0); i++) {
-          if (i < newStatuses.length) newStatuses[i] = 'not_exist';
+
+        // Not on WhatsApp (not_exist) messages
+        for (let i = 0; i < notExistCount && index < newStatuses.length; i++, index++) {
+          newStatuses[index] = 'not_exist';
         }
+
         return newStatuses;
       });
     },
@@ -258,7 +288,6 @@ export default function CampaignDetailsDialog({
     [campaignData]
   );
 
-  // Listen for WebSocket events
   useEffect(() => {
     if (!isConnected || !campaignData) return;
 
@@ -275,12 +304,11 @@ export default function CampaignDetailsDialog({
     };
   }, [isConnected, campaignData, on, off, handleCampaignProgress, handleCampaignComplete, handleCampaignPaused, handleCampaignResumed]);
 
-  // Refresh campaign details manually
   const refreshCampaignDetails = async () => {
     if (!campaignData || !token) return;
 
     setIsRefreshing(true);
-    hasLoadedDetailsRef.current = false; // Allow re-fetch on manual refresh
+    hasLoadedDetailsRef.current = false;
     try {
       await loadCampaignDetails(campaignData._id);
     } catch (error) {
@@ -290,7 +318,6 @@ export default function CampaignDetailsDialog({
     }
   };
 
-  // Campaign control (stop/resume)
   const handleCampaignControl = useCallback(
     async (action: 'stop' | 'resume') => {
       if (!campaignData) return;
@@ -368,9 +395,20 @@ export default function CampaignDetailsDialog({
   const handleStopCampaign = useCallback(() => handleCampaignControl('stop'), [handleCampaignControl]);
   const handleResumeCampaign = useCallback(() => handleCampaignControl('resume'), [handleCampaignControl]);
 
+  useEffect(() => {
+    if (!open) {
+      hasLoadedDetailsRef.current = false;
+      setCurrentPage(1);
+      setRecipientStatuses([]);
+      setIsRefreshing(false);
+      setIsPaused(false);
+      setIsProcessing(false);
+      setIsLoadingDetails(false);
+    }
+  }, [open]);
+
   if (!campaignData) return null;
 
-  // Pagination logic
   const totalRecipients = campaignData.recipients?.length || 0;
   const totalPages = Math.ceil(totalRecipients / recipientsPerPage);
   const indexOfLastRecipient = currentPage * recipientsPerPage;
@@ -541,32 +579,6 @@ export default function CampaignDetailsDialog({
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-semibold text-zinc-200">Recipients ({totalRecipients})</h3>
-                  {(isProcessing || isPaused) && (
-                    <div className="flex gap-2">
-                      {isProcessing && (
-                        <Button
-                          onClick={handleStopCampaign}
-                          disabled={isStoppingRef.current}
-                          size="sm"
-                          className="bg-red-600/20 border-red-500 text-red-400 hover:bg-red-600/30 transition-all duration-75"
-                        >
-                          <StopCircle className="h-4 w-4 mr-2" />
-                          {isStoppingRef.current ? 'Stopping...' : 'Stop Campaign'}
-                        </Button>
-                      )}
-                      {isPaused && (
-                        <Button
-                          onClick={handleResumeCampaign}
-                          disabled={isResumingRef.current}
-                          size="sm"
-                          className="bg-green-600/20 border-green-500 text-green-400 hover:bg-green-600/30 transition-all duration-75"
-                        >
-                          <Play className="h-4 w-4 mr-2" />
-                          {isResumingRef.current ? 'Resuming...' : 'Resume Campaign'}
-                        </Button>
-                      )}
-                    </div>
-                  )}
                 </div>
 
                 <div className="overflow-x-auto">

@@ -4,8 +4,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Eye, Trash2, Loader2, CheckCircle, XCircle, Clock, RefreshCw } from 'lucide-react';
-import { memo, useEffect, useState } from 'react';
+import { Eye, Trash2, Loader2, CheckCircle, XCircle, Clock, RefreshCw, StopCircle, Pause, Play } from 'lucide-react';
+import { memo, useEffect, useState, useCallback } from 'react';
 import { useSocket } from "../hooks/useSocket";
 import Cookies from 'js-cookie';
 
@@ -19,7 +19,7 @@ interface Campaign {
   };
   instances: any[];
   recipients: any[];
-  status: 'completed' | 'failed' | 'processing';
+  status: 'completed' | 'failed' | 'processing' | 'paused';
   totalMessages: number;
   sentMessages: number;
   failedMessages: number;
@@ -38,7 +38,8 @@ interface CampaignTableProps {
 const CAMPAIGN_STATUS = {
   completed: { label: 'Completed', color: 'bg-green-500', icon: CheckCircle },
   failed: { label: 'Failed', color: 'bg-red-500', icon: XCircle },
-  processing: { label: 'Processing', color: 'bg-blue-500', icon: Clock }
+  processing: { label: 'Processing', color: 'bg-blue-500', icon: Clock },
+  paused: { label: 'Paused', color: 'bg-yellow-500', icon: Pause }
 };
 
 // Memoized row component to prevent unnecessary re-renders
@@ -56,6 +57,7 @@ const CampaignRow = memo(({
   onCampaignUpdate?: (updatedCampaign: Campaign) => void;
 }) => {
   const [localCampaign, setLocalCampaign] = useState<Campaign>(campaign);
+  const [isControlling, setIsControlling] = useState(false);
 
   // Get token for socket connection
   const getToken = (): string | null => {
@@ -122,14 +124,91 @@ const CampaignRow = memo(({
       onCampaignUpdate?.(updatedCampaign);
     };
 
+    const handleCampaignPaused = (data: any) => {
+      if (data.campaignId !== localCampaign._id) return;
+
+      console.log('Campaign paused for row:', data);
+
+      const updatedCampaign = {
+        ...localCampaign,
+        status: 'paused' as const
+      };
+
+      setLocalCampaign(updatedCampaign);
+      onCampaignUpdate?.(updatedCampaign);
+      setIsControlling(false);
+    };
+
+    const handleCampaignResumed = (data: any) => {
+      if (data.campaignId !== localCampaign._id) return;
+
+      console.log('Campaign resumed for row:', data);
+
+      const updatedCampaign = {
+        ...localCampaign,
+        status: 'processing' as const
+      };
+
+      setLocalCampaign(updatedCampaign);
+      onCampaignUpdate?.(updatedCampaign);
+      setIsControlling(false);
+    };
+
     on('campaign.progress', handleCampaignProgress);
     on('campaign.complete', handleCampaignComplete);
+    on('campaign.paused', handleCampaignPaused);
+    on('campaign.resumed', handleCampaignResumed);
 
     return () => {
       off('campaign.progress', handleCampaignProgress);
       off('campaign.complete', handleCampaignComplete);
+      off('campaign.paused', handleCampaignPaused);
+      off('campaign.resumed', handleCampaignResumed);
     };
   }, [isConnected, localCampaign._id, on, off, onCampaignUpdate]);
+
+  // Campaign control function
+  const handleCampaignControl = useCallback(async (action: 'stop' | 'resume') => {
+    if (isControlling) return;
+
+    setIsControlling(true);
+    
+    // Optimistic UI update
+    const newStatus = action === 'stop' ? 'paused' : 'processing';
+    const updatedCampaign = { ...localCampaign, status: newStatus as any };
+    setLocalCampaign(updatedCampaign);
+    onCampaignUpdate?.(updatedCampaign);
+
+    try {
+      const authToken = getToken();
+      const response = await fetch('https://whatsapp.recuperafly.com/api/template/campaign/control', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          campaignId: localCampaign._id,
+          action,
+        }),
+      });
+
+      const result = await response.json();
+      if (!result.status) {
+        // Revert on failure
+        setLocalCampaign(localCampaign);
+        onCampaignUpdate?.(localCampaign);
+        console.error(`Campaign ${action} failed:`, result.message);
+      }
+    } catch (error) {
+      // Revert on error
+      setLocalCampaign(localCampaign);
+      onCampaignUpdate?.(localCampaign);
+      console.error(`Error ${action}ing campaign:`, error);
+    } finally {
+      setIsControlling(false);
+    }
+  }, [localCampaign, isControlling, getToken, onCampaignUpdate]);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -147,10 +226,38 @@ const CampaignRow = memo(({
     
     const Icon = statusInfo.icon;
     return (
-      <Badge className={`${statusInfo.color} text-white flex items-center gap-1`}>
-        <Icon className="h-3 w-3" />
-        {statusInfo.label}
-      </Badge>
+      <div className="flex items-center gap-2">
+        <Badge className={`${statusInfo.color} text-white flex items-center gap-1`}>
+          <Icon className="h-3 w-3" />
+          {statusInfo.label}
+        </Badge>
+        {(status === 'processing' || status === 'paused') && (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleCampaignControl(status === 'processing' ? 'stop' : 'resume')}
+                  disabled={isControlling}
+                  className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 h-6 w-6 p-0"
+                >
+                  {isControlling ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : status === 'processing' ? (
+                    <StopCircle className="h-3 w-3" />
+                  ) : (
+                    <Play className="h-3 w-3" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{status === 'processing' ? 'Stop Campaign' : 'Resume Campaign'}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+      </div>
     );
   };
 

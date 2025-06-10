@@ -449,7 +449,7 @@ export default function FinalStep({
                 </p>
               </div>
             </div>
-          </CardContent>
+          </CardContent> 
         </Card>
       )}
 

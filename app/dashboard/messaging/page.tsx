@@ -169,6 +169,30 @@ export default function MessagingPage() {
     router.push('/login');
   };
 
+  // Handle campaign updates from real-time events
+  const handleCampaignUpdate = useCallback((updatedCampaign: Campaign) => {
+    setCampaigns(prev => {
+      const newCampaigns = prev.map(campaign => 
+        campaign._id === updatedCampaign._id ? updatedCampaign : campaign
+      );
+
+      // Update stats with the new campaigns list
+      setCampaignStats(prevStats => ({
+        ...prevStats,
+        completed: newCampaigns.filter(c => c.status === 'completed').length,
+        failed: newCampaigns.filter(c => c.status === 'failed').length,
+        processing: newCampaigns.filter(c => c.status === 'processing').length,
+      }));
+
+      return newCampaigns;
+    });
+
+    // Update selected campaign if it's the one being viewed
+    if (selectedCampaign && selectedCampaign._id === updatedCampaign._id) {
+      setSelectedCampaign(updatedCampaign);
+    }
+  }, [selectedCampaign]);
+
   // Optimized fetch data with better error handling and caching
   const fetchData = useCallback(async (showLoader = true) => {
     const token = await getToken();
@@ -507,6 +531,7 @@ export default function MessagingPage() {
                   setShowCampaignDetails(true);
                 }}
                 onDelete={handleDeleteCampaign}
+                onCampaignUpdate={handleCampaignUpdate}
               />
             )}
           </CardContent>

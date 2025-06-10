@@ -208,7 +208,7 @@ export default function CreateCampaignDialog({
         <DialogHeader>
           <DialogTitle className="text-xl font-semibold">Create New Campaign</DialogTitle>
           <DialogDescription className="text-zinc-400">
-            Connect with your customers through RCS.
+            Connect with your customers through whatsapp.
           </DialogDescription>
         </DialogHeader>
         

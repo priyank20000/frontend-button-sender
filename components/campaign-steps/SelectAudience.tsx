@@ -4,10 +4,11 @@ import { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Upload, Users, Trash2, Plus, FileText, Eraser } from 'lucide-react';
+import { Upload, Users, Trash2, Plus, FileText, Eraser, Download } from 'lucide-react';
 import { ConfigProvider, Table as AntTable, Button as AntButton, Form, message as antMessage } from 'antd';
 import { DeleteOutlined } from '@ant-design/icons';
 import ExcelImportModal from '../ExcelImportModal';
+import * as XLSX from 'xlsx';
 
 interface SelectAudienceProps {
   antdContacts: any[];
@@ -176,6 +177,65 @@ export default function SelectAudience({
       ),
     },
   ];
+
+  // Handle downloading sample Excel file
+  const handleDownloadSampleExcel = () => {
+    // Sample data with name, number (with country code), and var1 to var10
+    const sampleData = [
+      {
+        name: 'John Doe',
+        number: '+12025550123',
+        var1: 'John',
+        var2: '123.456.789-10',
+        var3: '2 BONECO',
+        var4: 'NB123456789012BR',
+        var5: '123 Main St, New York, NY 10001',
+        var6: '100.50',
+        var7: 'Group A',
+        var8: 'Active',
+        var9: '2025-01-01',
+        var10: 'VIP'
+      },
+      {
+        name: 'Jane Smith',
+        number: '+919876543210',
+        var1: 'Jane',
+        var2: '987.654.321-00',
+        var3: '3 BONECO',
+        var4: 'NB987654321098BR',
+        var5: '456 Elm St, Mumbai, MH 400001',
+        var6: '200.75',
+        var7: 'Group B',
+        var8: 'Inactive',
+        var9: '2025-02-01',
+        var10: 'Standard'
+      }
+    ];
+
+    // Create worksheet
+    const worksheet = XLSX.utils.json_to_sheet(sampleData);
+    // Define column widths (in characters)
+    worksheet['!cols'] = [
+      { wch: 20 }, // name
+      { wch: 15 }, // number
+      { wch: 15 }, // var1
+      { wch: 15 }, // var2
+      { wch: 10 }, // var3
+      { wch: 15 }, // var4
+      { wch: 30 }, // var5
+      { wch: 10 }, // var6
+      { wch: 10 }, // var7
+      { wch: 10 }, // var8
+      { wch: 15 }, // var9
+      { wch: 10 }  // var10
+    ];
+    // Create workbook
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
+    // Generate Excel file and trigger download
+    XLSX.writeFile(workbook, 'Sample_Contacts.xlsx');
+    antMessage.success('Sample Excel file downloaded successfully');
+  };
 
   const handleContactAdd = () => {
     contactForm.resetFields();
@@ -370,7 +430,7 @@ export default function SelectAudience({
       <div className="space-y-6">
         <div>
           <h3 className="text-lg font-semibold text-zinc-200 mb-2">Select Audience</h3>
-          <p className="text-zinc-400 mb-6">Import recipients from Excel or add manually. Click any cell to edit.</p>
+          <p className="text-zinc-400 mb-6">Import recipients from Excel, download a sample Excel file, or add manually. Click any cell to edit.</p>
         </div>
 
         {/* Instructions */}
@@ -381,6 +441,8 @@ export default function SelectAudience({
               <h4 className="text-blue-400 font-medium mb-1">Editing Instructions</h4>
               <ul className="text-blue-300 text-sm space-y-1">
                 <li>• Click any cell (Name, Number, or Variables) to edit</li>
+                <li>• Download the sample Excel file for the correct import format</li>
+                <li>• Include country codes (e.g., +1, +91) in phone numbers</li>
               </ul>
             </div>
           </div>
@@ -395,6 +457,14 @@ export default function SelectAudience({
           >
             <Upload className="h-4 w-4 mr-2" />
             Excel Import
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleDownloadSampleExcel}
+            className="bg-zinc-800 hover:bg-zinc-700 text-white border-zinc-700"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Download Sample Excel
           </Button>
           <Button
             variant="outline"
@@ -429,8 +499,6 @@ export default function SelectAudience({
             Add Contact
           </Button>
         </div>
-
-        
 
         {/* Ant Design Table with Fixed Width Container */}
         <div className="bg-zinc-900 rounded-lg p-4 table-container">
@@ -497,7 +565,7 @@ export default function SelectAudience({
                   rules={[{ required: true, message: 'Please enter number' }]}
                 >
                   <Input
-                    placeholder="Enter phone number"
+                    placeholder="Enter phone number (e.g., +12025550123)"
                     className="bg-zinc-900 border-zinc-700 text-zinc-200 focus:border-blue-500"
                   />
                 </Form.Item>

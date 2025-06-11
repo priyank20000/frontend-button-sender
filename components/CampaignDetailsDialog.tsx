@@ -52,9 +52,13 @@ export default function CampaignDetailsDialog({
   const lastProgressUpdateRef = useRef<number>(0);
   const hasLoadedDetailsRef = useRef(false);
   const autoRefreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const hasCompletedRef = useRef(false); // Track if campaign has completed to prevent multiple refreshes
+  const hasCompletedRef = useRef(false);
+  const socketListenersSetupRef = useRef(false);
 
+  // SSR-safe token getter
   const getToken = useCallback((): string | null => {
+    if (typeof window === 'undefined') return null;
+    
     const cookieToken = Cookies.get('token');
     if (cookieToken) return cookieToken;
     return localStorage.getItem('token');
@@ -173,11 +177,12 @@ export default function CampaignDetailsDialog({
       setCampaignData(campaign);
       setIsPaused(campaign.status === 'paused');
       setIsProcessing(campaign.status === 'processing');
-      hasCompletedRef.current = campaign.status === 'completed'; // Set if already completed
+      hasCompletedRef.current = campaign.status === 'completed';
       loadCampaignDetails(campaign._id);
     }
   }, [campaign, open, loadCampaignDetails]);
 
+  // Optimized progress handler with throttling for large numbers
   const handleCampaignProgress = useCallback(
     (data: any) => {
       if (!campaignData || data.campaignId !== campaignData._id) return;
@@ -322,8 +327,12 @@ export default function CampaignDetailsDialog({
     [campaignData]
   );
 
+  // Setup socket listeners only once and cleanup properly
   useEffect(() => {
-    if (!isConnected || !campaignData) return;
+    if (!isConnected || !campaignData || socketListenersSetupRef.current) return;
+
+    console.log('Setting up socket listeners for campaign:', campaignData._id);
+    socketListenersSetupRef.current = true;
 
     on('campaign.progress', handleCampaignProgress);
     on('campaign.complete', handleCampaignComplete);
@@ -331,12 +340,14 @@ export default function CampaignDetailsDialog({
     on('campaign.resumed', handleCampaignResumed);
 
     return () => {
+      console.log('Cleaning up socket listeners for campaign:', campaignData._id);
       off('campaign.progress', handleCampaignProgress);
       off('campaign.complete', handleCampaignComplete);
       off('campaign.paused', handleCampaignPaused);
       off('campaign.resumed', handleCampaignResumed);
+      socketListenersSetupRef.current = false;
     };
-  }, [isConnected, campaignData, on, off, handleCampaignProgress, handleCampaignComplete, handleCampaignPaused, handleCampaignResumed]);
+  }, [isConnected, campaignData?._id, on, off, handleCampaignProgress, handleCampaignComplete, handleCampaignPaused, handleCampaignResumed]);
 
   const refreshCampaignDetails = async () => {
     if (!campaignData || !token) return;
@@ -429,10 +440,12 @@ export default function CampaignDetailsDialog({
   const handleStopCampaign = useCallback(() => handleCampaignControl('stop'), [handleCampaignControl]);
   const handleResumeCampaign = useCallback(() => handleCampaignControl('resume'), [handleCampaignControl]);
 
+  // Reset all state when dialog closes
   useEffect(() => {
     if (!open) {
       hasLoadedDetailsRef.current = false;
-      hasCompletedRef.current = false; // Reset completion flag
+      hasCompletedRef.current = false;
+      socketListenersSetupRef.current = false;
       setCurrentPage(1);
       setRecipientStatuses([]);
       setIsRefreshing(false);

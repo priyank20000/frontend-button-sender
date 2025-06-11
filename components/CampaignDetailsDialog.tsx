@@ -222,6 +222,9 @@ export default function CampaignDetailsDialog({
       if (data.status === 'completed') {
         setIsProcessing(false);
         setIsPaused(false);
+        // Reset control flags when campaign completes
+        isStoppingRef.current = false;
+        isResumingRef.current = false;
         // Only auto-refresh if we haven't completed before
         if (!hasCompletedRef.current) {
           hasCompletedRef.current = true;
@@ -232,6 +235,9 @@ export default function CampaignDetailsDialog({
       } else if (data.status === 'processing') {
         setIsProcessing(true);
         setIsPaused(false);
+        // Reset control flags when campaign is processing
+        isStoppingRef.current = false;
+        isResumingRef.current = false;
       }
     },
     [campaignData, loadCampaignDetails]
@@ -257,6 +263,9 @@ export default function CampaignDetailsDialog({
 
       setIsProcessing(false);
       setIsPaused(false);
+      // Reset control flags when campaign completes
+      isStoppingRef.current = false;
+      isResumingRef.current = false;
 
       // Update statuses on campaign completion and force refresh only once
       setRecipientStatuses((prev) => {
@@ -305,7 +314,9 @@ export default function CampaignDetailsDialog({
 
       setIsPaused(true);
       setIsProcessing(false);
+      // Reset control flags when campaign is paused
       isStoppingRef.current = false;
+      isResumingRef.current = false;
 
       setCampaignData((prev) => (prev ? { ...prev, status: 'paused' } : null));
     },
@@ -320,6 +331,8 @@ export default function CampaignDetailsDialog({
 
       setIsPaused(false);
       setIsProcessing(true);
+      // Reset control flags when campaign is resumed
+      isStoppingRef.current = false;
       isResumingRef.current = false;
 
       setCampaignData((prev) => (prev ? { ...prev, status: 'processing' } : null));
@@ -367,16 +380,23 @@ export default function CampaignDetailsDialog({
     async (action: 'stop' | 'resume') => {
       if (!campaignData) return;
 
+      // Prevent multiple simultaneous control actions
       if (action === 'stop' && isStoppingRef.current) return;
       if (action === 'resume' && isResumingRef.current) return;
 
+      // Set control flags
       if (action === 'stop') {
         isStoppingRef.current = true;
+      } else {
+        isResumingRef.current = true;
+      }
+
+      // INSTANT UI UPDATE - No waiting for server response
+      if (action === 'stop') {
         setIsProcessing(false);
         setIsPaused(true);
         setCampaignData((prev) => (prev ? { ...prev, status: 'paused' } : null));
       } else {
-        isResumingRef.current = true;
         setIsProcessing(true);
         setIsPaused(false);
         setCampaignData((prev) => (prev ? { ...prev, status: 'processing' } : null));
@@ -405,8 +425,10 @@ export default function CampaignDetailsDialog({
 
         if (result.status) {
           console.log(`Campaign ${action} signal sent successfully`);
+          // Don't reset flags here - let socket events handle it
         } else {
           console.error(`Campaign ${action} failed:`, result.message);
+          // Revert UI state and reset flags on failure
           if (action === 'stop') {
             setIsProcessing(true);
             setIsPaused(false);
@@ -421,6 +443,7 @@ export default function CampaignDetailsDialog({
         }
       } catch (error) {
         console.error(`Error ${action}ing campaign:`, error);
+        // Revert UI state and reset flags on error
         if (action === 'stop') {
           setIsProcessing(true);
           setIsPaused(false);
@@ -453,6 +476,10 @@ export default function CampaignDetailsDialog({
       setIsProcessing(false);
       setIsLoadingDetails(false);
       setStatusFilter('all');
+      
+      // Reset control flags when dialog closes
+      isStoppingRef.current = false;
+      isResumingRef.current = false;
       
       // Clear auto-refresh timeout when dialog closes
       if (autoRefreshTimeoutRef.current) {

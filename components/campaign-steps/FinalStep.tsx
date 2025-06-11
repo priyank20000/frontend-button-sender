@@ -141,11 +141,20 @@ export default function FinalStep({
     setExistingNumbers(data.sent);
     setNonExistingNumbers(data.notExist || 0);
 
-    // Update state flags
+    // Update state flags and reset control flags
     if (data.status === 'completed') {
       setIsProcessing(false);
       setIsCompleted(true);
       setIsPaused(false);
+      // Reset control flags when campaign completes
+      isStoppingRef.current = false;
+      isResumingRef.current = false;
+    } else if (data.status === 'processing') {
+      setIsProcessing(true);
+      setIsPaused(false);
+      // Reset control flags when campaign is processing
+      isStoppingRef.current = false;
+      isResumingRef.current = false;
     }
   }, [currentCampaignId, antdContacts]);
 
@@ -155,6 +164,9 @@ export default function FinalStep({
     setIsProcessing(false);
     setIsCompleted(true);
     setIsPaused(false);
+    // Reset control flags when campaign completes
+    isStoppingRef.current = false;
+    isResumingRef.current = false;
     
     // Final count update
     setExistingNumbers(data.sent);
@@ -175,7 +187,9 @@ export default function FinalStep({
     
     setIsPaused(true);
     setIsProcessing(false);
-    isStoppingRef.current = false; // Reset stopping flag
+    // Reset control flags when campaign is paused
+    isStoppingRef.current = false;
+    isResumingRef.current = false;
     setCampaignProgress(prev => ({
       ...prev,
       status: 'paused',
@@ -189,7 +203,9 @@ export default function FinalStep({
     
     setIsPaused(false);
     setIsProcessing(true);
-    isResumingRef.current = false; // Reset resuming flag
+    // Reset control flags when campaign is resumed
+    isStoppingRef.current = false;
+    isResumingRef.current = false;
     setCampaignProgress(prev => ({
       ...prev,
       status: 'processing',
@@ -318,13 +334,18 @@ export default function FinalStep({
     if (action === 'stop' && isStoppingRef.current) return;
     if (action === 'resume' && isResumingRef.current) return;
 
-    // INSTANT UI UPDATE - No waiting for server response
+    // Set control flags
     if (action === 'stop') {
       isStoppingRef.current = true;
+    } else {
+      isResumingRef.current = true;
+    }
+
+    // INSTANT UI UPDATE - No waiting for server response
+    if (action === 'stop') {
       setIsProcessing(false);
       setIsPaused(true);
     } else {
-      isResumingRef.current = true;
       setIsProcessing(true);
       setIsPaused(false);
     }
@@ -355,6 +376,7 @@ export default function FinalStep({
         .then(result => {
           if (result.status) {
             console.log(`Campaign ${action} signal sent successfully`);
+            // Don't reset flags here - let socket events handle it
           } else {
             console.error(`Campaign ${action} failed:`, result.message);
             // Revert UI state if server request failed

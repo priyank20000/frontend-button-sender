@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ChevronLeft, ChevronRight, RefreshCw, Pause, Play, StopCircle, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, RefreshCw, Pause, Play, StopCircle, Loader2, Users, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useSocket } from "../hooks/useSocket";
 import Cookies from 'js-cookie';
 
@@ -44,12 +45,14 @@ export default function CampaignDetailsDialog({
   const [isPaused, setIsPaused] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>('all'); // 'all', 'sent', 'failed', 'not_exist'
 
   const isStoppingRef = useRef(false);
   const isResumingRef = useRef(false);
   const lastProgressUpdateRef = useRef<number>(0);
   const hasLoadedDetailsRef = useRef(false);
   const autoRefreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hasCompletedRef = useRef(false); // Track if campaign has completed to prevent multiple refreshes
 
   const getToken = useCallback((): string | null => {
     const cookieToken = Cookies.get('token');
@@ -145,10 +148,11 @@ export default function CampaignDetailsDialog({
             hasLoadedDetailsRef.current = true;
           }
 
-          // If campaign is completed, schedule a final refresh after 2 seconds to ensure all data is updated
-          if (detailedCampaign.status === 'completed' && !autoRefreshTimeoutRef.current) {
+          // Only schedule auto-refresh if campaign just completed and we haven't done it before
+          if (detailedCampaign.status === 'completed' && !hasCompletedRef.current && !autoRefreshTimeoutRef.current) {
+            hasCompletedRef.current = true;
             autoRefreshTimeoutRef.current = setTimeout(() => {
-              console.log('Auto-refreshing completed campaign data');
+              console.log('Final auto-refresh for completed campaign');
               loadCampaignDetails(campaignId, true);
               autoRefreshTimeoutRef.current = null;
             }, 2000);
@@ -169,6 +173,7 @@ export default function CampaignDetailsDialog({
       setCampaignData(campaign);
       setIsPaused(campaign.status === 'paused');
       setIsProcessing(campaign.status === 'processing');
+      hasCompletedRef.current = campaign.status === 'completed'; // Set if already completed
       loadCampaignDetails(campaign._id);
     }
   }, [campaign, open, loadCampaignDetails]);
@@ -212,10 +217,13 @@ export default function CampaignDetailsDialog({
       if (data.status === 'completed') {
         setIsProcessing(false);
         setIsPaused(false);
-        // Auto-refresh when campaign completes to ensure data consistency
-        setTimeout(() => {
-          loadCampaignDetails(data.campaignId, true);
-        }, 1000);
+        // Only auto-refresh if we haven't completed before
+        if (!hasCompletedRef.current) {
+          hasCompletedRef.current = true;
+          setTimeout(() => {
+            loadCampaignDetails(data.campaignId, true);
+          }, 1000);
+        }
       } else if (data.status === 'processing') {
         setIsProcessing(true);
         setIsPaused(false);
@@ -245,7 +253,7 @@ export default function CampaignDetailsDialog({
       setIsProcessing(false);
       setIsPaused(false);
 
-      // Update statuses on campaign completion and force refresh
+      // Update statuses on campaign completion and force refresh only once
       setRecipientStatuses((prev) => {
         const newStatuses = [...prev];
         const sentCount = data.sent || 0;
@@ -272,11 +280,14 @@ export default function CampaignDetailsDialog({
         return newStatuses;
       });
 
-      // Force refresh campaign details after completion
-      setTimeout(() => {
-        console.log('Force refreshing campaign details after completion');
-        loadCampaignDetails(data.campaignId, true);
-      }, 1500);
+      // Force refresh campaign details after completion only if not done before
+      if (!hasCompletedRef.current) {
+        hasCompletedRef.current = true;
+        setTimeout(() => {
+          console.log('Final refresh after campaign completion');
+          loadCampaignDetails(data.campaignId, true);
+        }, 1500);
+      }
     },
     [campaignData, loadCampaignDetails]
   );
@@ -421,12 +432,14 @@ export default function CampaignDetailsDialog({
   useEffect(() => {
     if (!open) {
       hasLoadedDetailsRef.current = false;
+      hasCompletedRef.current = false; // Reset completion flag
       setCurrentPage(1);
       setRecipientStatuses([]);
       setIsRefreshing(false);
       setIsPaused(false);
       setIsProcessing(false);
       setIsLoadingDetails(false);
+      setStatusFilter('all');
       
       // Clear auto-refresh timeout when dialog closes
       if (autoRefreshTimeoutRef.current) {
@@ -447,11 +460,18 @@ export default function CampaignDetailsDialog({
 
   if (!campaignData) return null;
 
-  const totalRecipients = campaignData.recipients?.length || 0;
+  // Filter recipients based on status
+  const filteredRecipients = campaignData.recipients?.filter((recipient, index) => {
+    if (statusFilter === 'all') return true;
+    const status = recipientStatuses[index] || 'pending';
+    return status === statusFilter;
+  }) || [];
+
+  const totalRecipients = filteredRecipients.length;
   const totalPages = Math.ceil(totalRecipients / recipientsPerPage);
   const indexOfLastRecipient = currentPage * recipientsPerPage;
   const indexOfFirstRecipient = indexOfLastRecipient - recipientsPerPage;
-  const currentRecipients = campaignData.recipients?.slice(indexOfFirstRecipient, indexOfLastRecipient) || [];
+  const currentRecipients = filteredRecipients.slice(indexOfFirstRecipient, indexOfLastRecipient);
 
   const handleNextPage = () => {
     if (currentPage < totalPages) setCurrentPage(currentPage + 1);
@@ -461,9 +481,9 @@ export default function CampaignDetailsDialog({
     if (currentPage > 1) setCurrentPage(currentPage - 1);
   };
 
-  const getRecipientStatus = (index: number) => {
-    const globalIndex = indexOfFirstRecipient + index;
-    return recipientStatuses[globalIndex] || 'pending';
+  const getRecipientStatus = (recipient: any) => {
+    const originalIndex = campaignData.recipients?.indexOf(recipient) || 0;
+    return recipientStatuses[originalIndex] || 'pending';
   };
 
   const getStatusColor = (status: string) => {
@@ -521,6 +541,11 @@ export default function CampaignDetailsDialog({
         return '❓';
     }
   };
+
+  // Get counts for each status
+  const sentCount = recipientStatuses.filter(status => status === 'sent').length;
+  const failedCount = recipientStatuses.filter(status => status === 'failed').length;
+  const notExistCount = recipientStatuses.filter(status => status === 'not_exist').length;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -592,31 +617,79 @@ export default function CampaignDetailsDialog({
                 </div>
                 <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4">
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-green-400">{campaignData.sentMessages}</div>
+                    <div className="text-2xl font-bold text-green-400">{sentCount}</div>
                     <div className="text-sm text-green-300">Sent</div>
                   </div>
                 </div>
                 <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4">
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-red-400">{campaignData.failedMessages}</div>
+                    <div className="text-2xl font-bold text-red-400">{failedCount}</div>
                     <div className="text-sm text-red-300">Failed</div>
                   </div>
                 </div>
                 <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4">
                   <div className="text-center">
-                    <div className={`text-2xl font-bold ${getCampaignStatusColor(campaignData.status)}`}>
-                      {getCampaignStatusIcon(campaignData.status)}
-                    </div>
-                    <div className="text-sm text-zinc-300 capitalize">
-                      {campaignData.status === 'paused' ? 'Paused' : campaignData.status}
-                    </div>
+                    <div className="text-2xl font-bold text-orange-400">{notExistCount}</div>
+                    <div className="text-sm text-orange-300">Not on WhatsApp</div>
                   </div>
                 </div>
               </div>
 
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold text-zinc-200">Recipients ({totalRecipients})</h3>
+                  <h3 className="text-lg font-semibold text-zinc-200">Recipients ({campaignData.recipients?.length || 0})</h3>
+                  
+                  {/* Status Filter Buttons */}
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => {
+                        setStatusFilter('all');
+                        setCurrentPage(1);
+                      }}
+                      variant={statusFilter === 'all' ? 'default' : 'outline'}
+                      size="sm"
+                      className={statusFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700'}
+                    >
+                      <Users className="h-4 w-4 mr-2" />
+                      All ({campaignData.recipients?.length || 0})
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setStatusFilter('sent');
+                        setCurrentPage(1);
+                      }}
+                      variant={statusFilter === 'sent' ? 'default' : 'outline'}
+                      size="sm"
+                      className={statusFilter === 'sent' ? 'bg-green-600 text-white' : 'bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700'}
+                    >
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Sent ({sentCount})
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setStatusFilter('failed');
+                        setCurrentPage(1);
+                      }}
+                      variant={statusFilter === 'failed' ? 'default' : 'outline'}
+                      size="sm"
+                      className={statusFilter === 'failed' ? 'bg-red-600 text-white' : 'bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700'}
+                    >
+                      <XCircle className="h-4 w-4 mr-2" />
+                      Failed ({failedCount})
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setStatusFilter('not_exist');
+                        setCurrentPage(1);
+                      }}
+                      variant={statusFilter === 'not_exist' ? 'default' : 'outline'}
+                      size="sm"
+                      className={statusFilter === 'not_exist' ? 'bg-orange-600 text-white' : 'bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700'}
+                    >
+                      <AlertTriangle className="h-4 w-4 mr-2" />
+                      Not on WhatsApp ({notExistCount})
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="overflow-x-auto">
@@ -632,7 +705,7 @@ export default function CampaignDetailsDialog({
                     <TableBody>
                       {currentRecipients.map((recipient, index) => {
                         const globalIndex = indexOfFirstRecipient + index;
-                        const status = getRecipientStatus(index);
+                        const status = getRecipientStatus(recipient);
 
                         return (
                           <TableRow key={`${recipient.phone}-${index}`} className="border-zinc-700">
@@ -656,6 +729,13 @@ export default function CampaignDetailsDialog({
                     <div className="flex items-center gap-3">
                       <span className="text-zinc-400 text-sm">
                         Showing {indexOfFirstRecipient + 1}-{Math.min(indexOfLastRecipient, totalRecipients)} of {totalRecipients} recipients
+                        {statusFilter !== 'all' && (
+                          <Badge variant="outline" className="ml-2 text-zinc-300">
+                            {statusFilter === 'sent' && 'Sent'}
+                            {statusFilter === 'failed' && 'Failed'}
+                            {statusFilter === 'not_exist' && 'Not on WhatsApp'}
+                          </Badge>
+                        )}
                       </span>
                     </div>
                     <div className="flex items-center">

@@ -289,7 +289,7 @@ export default function MessagingPage() {
           name: msg.name,
           template: {
             _id: msg.templateId,
-            name: `Template ${msg.templateId.slice(-4)}`,
+            name: `${msg.templateId.name}`,
             messageType: 'Text',
           },
           instances: (msg.instanceIds || [])

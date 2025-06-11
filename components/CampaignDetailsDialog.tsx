@@ -49,6 +49,7 @@ export default function CampaignDetailsDialog({
   const isResumingRef = useRef(false);
   const lastProgressUpdateRef = useRef<number>(0);
   const hasLoadedDetailsRef = useRef(false);
+  const autoRefreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const getToken = useCallback((): string | null => {
     const cookieToken = Cookies.get('token');
@@ -102,8 +103,8 @@ export default function CampaignDetailsDialog({
     return statuses;
   }, []);
 
-  const loadCampaignDetails = useCallback(async (campaignId: string) => {
-    if (!token || hasLoadedDetailsRef.current) return;
+  const loadCampaignDetails = useCallback(async (campaignId: string, forceRefresh = false) => {
+    if (!token || (hasLoadedDetailsRef.current && !forceRefresh)) return;
 
     setIsLoadingDetails(true);
     try {
@@ -139,7 +140,19 @@ export default function CampaignDetailsDialog({
 
           setIsPaused(detailedCampaign.status === 'paused');
           setIsProcessing(detailedCampaign.status === 'processing');
-          hasLoadedDetailsRef.current = true;
+          
+          if (!hasLoadedDetailsRef.current) {
+            hasLoadedDetailsRef.current = true;
+          }
+
+          // If campaign is completed, schedule a final refresh after 2 seconds to ensure all data is updated
+          if (detailedCampaign.status === 'completed' && !autoRefreshTimeoutRef.current) {
+            autoRefreshTimeoutRef.current = setTimeout(() => {
+              console.log('Auto-refreshing completed campaign data');
+              loadCampaignDetails(campaignId, true);
+              autoRefreshTimeoutRef.current = null;
+            }, 2000);
+          }
         }
       } else {
         console.error('Failed to load campaign details:', response.status);
@@ -199,12 +212,16 @@ export default function CampaignDetailsDialog({
       if (data.status === 'completed') {
         setIsProcessing(false);
         setIsPaused(false);
+        // Auto-refresh when campaign completes to ensure data consistency
+        setTimeout(() => {
+          loadCampaignDetails(data.campaignId, true);
+        }, 1000);
       } else if (data.status === 'processing') {
         setIsProcessing(true);
         setIsPaused(false);
       }
     },
-    [campaignData]
+    [campaignData, loadCampaignDetails]
   );
 
   const handleCampaignComplete = useCallback(
@@ -228,7 +245,7 @@ export default function CampaignDetailsDialog({
       setIsProcessing(false);
       setIsPaused(false);
 
-      // Update statuses on campaign completion
+      // Update statuses on campaign completion and force refresh
       setRecipientStatuses((prev) => {
         const newStatuses = [...prev];
         const sentCount = data.sent || 0;
@@ -254,8 +271,14 @@ export default function CampaignDetailsDialog({
 
         return newStatuses;
       });
+
+      // Force refresh campaign details after completion
+      setTimeout(() => {
+        console.log('Force refreshing campaign details after completion');
+        loadCampaignDetails(data.campaignId, true);
+      }, 1500);
     },
-    [campaignData]
+    [campaignData, loadCampaignDetails]
   );
 
   const handleCampaignPaused = useCallback(
@@ -310,7 +333,7 @@ export default function CampaignDetailsDialog({
     setIsRefreshing(true);
     hasLoadedDetailsRef.current = false;
     try {
-      await loadCampaignDetails(campaignData._id);
+      await loadCampaignDetails(campaignData._id, true);
     } catch (error) {
       console.error('Error refreshing campaign details:', error);
     } finally {
@@ -404,8 +427,23 @@ export default function CampaignDetailsDialog({
       setIsPaused(false);
       setIsProcessing(false);
       setIsLoadingDetails(false);
+      
+      // Clear auto-refresh timeout when dialog closes
+      if (autoRefreshTimeoutRef.current) {
+        clearTimeout(autoRefreshTimeoutRef.current);
+        autoRefreshTimeoutRef.current = null;
+      }
     }
   }, [open]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (autoRefreshTimeoutRef.current) {
+        clearTimeout(autoRefreshTimeoutRef.current);
+      }
+    };
+  }, []);
 
   if (!campaignData) return null;
 

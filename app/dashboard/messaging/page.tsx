@@ -453,8 +453,7 @@ export default function MessagingPage() {
 
       setResponseDialogOpen(true);
       showToast('Campaign created and started successfully!', 'success');
-      setShowCreateCampaign(false);
-
+      
       // IMMEDIATE UPDATE: Create and add the new campaign to the list
       const newCampaign: Campaign = {
         _id: result.campaignId || result.campaign?._id || `temp_${Date.now()}`,
@@ -500,6 +499,33 @@ export default function MessagingPage() {
       setIsSending(false);
     }
   };
+
+  // Enhanced dialog close handler with automatic refresh
+  const handleCloseCreateCampaign = useCallback(() => {
+    setShowCreateCampaign(false);
+    
+    // Reset form data
+    setCampaignName('');
+    setSelectedTemplate('');
+    setSelectedInstances([]);
+    setRecipients([{ phone: '', name: '', variables: { var1: '', var2: '', var3: '', var4: '', var5: '', var6: '', var7: '', var8: '', var9: '', var10: '' } }]);
+    setAntdContacts([]);
+    setDelayRange({ start: 3, end: 5 });
+    
+    // Automatically refresh campaigns data when dialog closes
+    console.log('Dialog closed, refreshing campaigns...');
+    fetchData(false);
+  }, [fetchData]);
+
+  // Enhanced dialog close handler for campaign details
+  const handleCloseCampaignDetails = useCallback(() => {
+    setShowCampaignDetails(false);
+    setSelectedCampaign(null);
+    
+    // Automatically refresh campaigns data when dialog closes
+    console.log('Campaign details closed, refreshing campaigns...');
+    fetchData(false);
+  }, [fetchData]);
 
   // Pagination
   const totalPages = Math.ceil(totalCampaigns / campaignsPerPage);
@@ -660,7 +686,7 @@ export default function MessagingPage() {
         {/* Dialogs */}
         <CreateCampaignDialog
           open={showCreateCampaign}
-          onOpenChange={setShowCreateCampaign}
+          onOpenChange={handleCloseCreateCampaign}
           onCreateCampaign={() => {}}
           onSendCampaign={handleSendCampaign}
           isCreating={isCreatingCampaign}
@@ -684,7 +710,7 @@ export default function MessagingPage() {
 
         <CampaignDetailsDialog
           open={showCampaignDetails}
-          onOpenChange={setShowCampaignDetails}
+          onOpenChange={handleCloseCampaignDetails}
           campaign={selectedCampaign}
         />
       </div>

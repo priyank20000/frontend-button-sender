@@ -53,7 +53,7 @@ interface Campaign {
   };
   instances: Instance[];
   recipients: Recipient[];
-  status: 'completed' | 'failed' | 'processing';
+  status: 'completed' | 'failed' | 'processing' | 'paused';
   totalMessages: number;
   sentMessages: number;
   failedMessages: number;
@@ -172,13 +172,23 @@ export default function MessagingPage() {
   // Handle campaign updates from real-time events
   const handleCampaignUpdate = useCallback((updatedCampaign: Campaign) => {
     setCampaigns(prev => {
-      const newCampaigns = prev.map(campaign => 
-        campaign._id === updatedCampaign._id ? updatedCampaign : campaign
-      );
+      const existingIndex = prev.findIndex(campaign => campaign._id === updatedCampaign._id);
+      
+      let newCampaigns;
+      if (existingIndex !== -1) {
+        // Update existing campaign
+        newCampaigns = prev.map(campaign => 
+          campaign._id === updatedCampaign._id ? updatedCampaign : campaign
+        );
+      } else {
+        // Add new campaign at the beginning
+        newCampaigns = [updatedCampaign, ...prev];
+        setTotalCampaigns(prevTotal => prevTotal + 1);
+      }
 
       // Update stats with the new campaigns list
       setCampaignStats(prevStats => ({
-        ...prevStats,
+        total: newCampaigns.length,
         completed: newCampaigns.filter(c => c.status === 'completed').length,
         failed: newCampaigns.filter(c => c.status === 'failed').length,
         processing: newCampaigns.filter(c => c.status === 'processing').length,
@@ -192,6 +202,33 @@ export default function MessagingPage() {
       setSelectedCampaign(updatedCampaign);
     }
   }, [selectedCampaign]);
+
+  // Add new campaign to the list immediately
+  const addNewCampaign = useCallback((newCampaign: Campaign) => {
+    setCampaigns(prev => {
+      // Check if campaign already exists
+      const exists = prev.some(campaign => campaign._id === newCampaign._id);
+      if (exists) {
+        return prev;
+      }
+      
+      // Add new campaign at the beginning
+      const newCampaigns = [newCampaign, ...prev];
+      
+      // Update total count
+      setTotalCampaigns(prevTotal => prevTotal + 1);
+      
+      // Update stats
+      setCampaignStats(prevStats => ({
+        total: prevStats.total + 1,
+        completed: newCampaigns.filter(c => c.status === 'completed').length,
+        failed: newCampaigns.filter(c => c.status === 'failed').length,
+        processing: newCampaigns.filter(c => c.status === 'processing').length,
+      }));
+      
+      return newCampaigns;
+    });
+  }, []);
 
   // Optimized fetch data with better error handling and caching
   const fetchData = useCallback(async (showLoader = true) => {
@@ -264,9 +301,9 @@ export default function MessagingPage() {
             variables: {},
           })),
           status: msg.status,
-          totalMessages: msg.statistics.total,
-          sentMessages: msg.statistics.sent,
-          failedMessages: msg.statistics.failed,
+          totalMessages: msg.statistics?.total || msg.recipients?.length || 0,
+          sentMessages: msg.statistics?.sent || 0,
+          failedMessages: msg.statistics?.failed || 0,
           createdAt: msg.createdAt,
           delayRange: msg.settings.delayRange,
         }));
@@ -415,8 +452,34 @@ export default function MessagingPage() {
       }
 
       setResponseDialogOpen(true);
-      showToast('Campaign is being processed in the background!', 'success');
+      showToast('Campaign created and started successfully!', 'success');
       setShowCreateCampaign(false);
+
+      // IMMEDIATE UPDATE: Create and add the new campaign to the list
+      const newCampaign: Campaign = {
+        _id: result.campaignId || result.campaign?._id || `temp_${Date.now()}`,
+        name: campaignName,
+        template: {
+          _id: selectedTemplate,
+          name: `Template ${selectedTemplate.slice(-4)}`,
+          messageType: 'Text',
+        },
+        instances: selectedInstances.map(id => instances.find(inst => inst._id === id)).filter(Boolean) as Instance[],
+        recipients: antdContacts.filter(r => r.number && r.name).map(contact => ({
+          phone: contact.number,
+          name: contact.name,
+          variables: {},
+        })),
+        status: 'processing',
+        totalMessages: antdContacts.filter(r => r.number && r.name).length,
+        sentMessages: 0,
+        failedMessages: 0,
+        createdAt: new Date().toISOString(),
+        delayRange,
+      };
+
+      // Add to campaigns list immediately
+      addNewCampaign(newCampaign);
 
       // Reset form
       setCampaignName('');
@@ -426,10 +489,10 @@ export default function MessagingPage() {
       setAntdContacts([]);
       setDelayRange({ start: 3, end: 5 });
 
-      // Refresh data immediately to show the new campaign
+      // Also refresh data after a short delay to ensure consistency
       setTimeout(() => {
         fetchData(false);
-      }, 1000);
+      }, 2000);
 
     } catch (err) {
       showToast('Error sending campaign: ' + (err instanceof Error ? err.message : 'Unknown error'), 'error');

@@ -80,6 +80,7 @@ export default function FinalStep({
   const isResumingRef = useRef(false);
   const lastProgressUpdateRef = useRef<number>(0);
   const instanceCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastInstanceStatusRef = useRef<{ [key: string]: string }>({});
 
   // Get token for socket connection
   const getToken = useCallback((): string | null => {
@@ -104,60 +105,75 @@ export default function FinalStep({
     }
   });
 
-  // Enhanced instance monitoring with INSTANT disconnect detection
+  // ULTRA-FAST instance monitoring with INSTANT disconnect detection
   const checkInstanceConnections = useCallback(() => {
-    if (!campaignStarted || !selectedInstances.length) return;
+    if (!campaignStarted || !selectedInstances.length || !isProcessing) return;
 
-    const connectedInstances = instances.filter(instance => 
-      selectedInstances.includes(instance._id) && instance.whatsapp?.status === 'connected'
+    // Get current status of all selected instances
+    const currentInstanceStatuses: { [key: string]: string } = {};
+    selectedInstances.forEach(instanceId => {
+      const instance = instances.find(inst => inst._id === instanceId);
+      currentInstanceStatuses[instanceId] = instance?.whatsapp?.status || 'disconnected';
+    });
+
+    // Check if any instance status changed from connected to disconnected
+    let anyDisconnected = false;
+    selectedInstances.forEach(instanceId => {
+      const previousStatus = lastInstanceStatusRef.current[instanceId];
+      const currentStatus = currentInstanceStatuses[instanceId];
+      
+      if (previousStatus === 'connected' && currentStatus !== 'connected') {
+        console.log(`🚨 INSTANT DETECTION: Instance ${instanceId} disconnected!`);
+        anyDisconnected = true;
+      }
+    });
+
+    // Update the reference for next check
+    lastInstanceStatusRef.current = currentInstanceStatuses;
+
+    const connectedInstances = selectedInstances.filter(instanceId => 
+      currentInstanceStatuses[instanceId] === 'connected'
     );
     
-    const disconnectedInstances = instances.filter(instance => 
-      selectedInstances.includes(instance._id) && instance.whatsapp?.status !== 'connected'
+    const disconnectedInstances = selectedInstances.filter(instanceId => 
+      currentInstanceStatuses[instanceId] !== 'connected'
     );
 
     // INSTANT AUTO-PAUSE: If all selected instances are disconnected during active campaign
-    if (connectedInstances.length === 0 && (isProcessing || isPaused)) {
+    if (connectedInstances.length === 0 && isProcessing && !instancesDisconnected) {
       console.log('🚨 ALL INSTANCES DISCONNECTED - INSTANT AUTO-PAUSE');
       
-      // IMMEDIATE UI UPDATE - No delays
+      // IMMEDIATE UI UPDATE - No delays, no waiting
       setInstancesDisconnected(true);
       setDisconnectionReason(`All ${disconnectedInstances.length} selected instance(s) disconnected`);
+      setIsProcessing(false);
+      setIsPaused(true);
+      setCanResumeAfterReconnect(false);
       
-      // Only auto-pause if currently processing (not if already paused manually)
-      if (isProcessing) {
-        console.log('⏸️ Auto-pausing campaign due to instance disconnection');
-        
-        // INSTANT state changes
-        setIsProcessing(false);
-        setIsPaused(true);
-        setCanResumeAfterReconnect(false);
-        
-        // Update campaign progress to show disconnection IMMEDIATELY
-        setCampaignProgress(prev => ({
-          ...prev,
-          status: 'paused',
-          instancesDisconnected: true
-        }));
+      // Update campaign progress to show disconnection IMMEDIATELY
+      setCampaignProgress(prev => ({
+        ...prev,
+        status: 'paused',
+        instancesDisconnected: true
+      }));
 
-        // Send pause signal to backend (fire and forget - don't wait)
-        if (currentCampaignId) {
-          const authToken = getToken();
-          if (authToken) {
-            fetch('https://whatsapp.recuperafly.com/api/template/campaign/control', {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${authToken}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({ 
-                campaignId: currentCampaignId,
-                action: 'stop'
-              })
-            }).catch(error => {
-              console.error('Failed to send auto-pause signal:', error);
-            });
-          }
+      // Send pause signal to backend (fire and forget - don't wait)
+      if (currentCampaignId) {
+        const authToken = getToken();
+        if (authToken) {
+          fetch('https://whatsapp.recuperafly.com/api/template/campaign/control', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${authToken}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ 
+              campaignId: currentCampaignId,
+              action: 'stop'
+            })
+          }).catch(error => {
+            console.error('Failed to send auto-pause signal:', error);
+          });
         }
       }
     } 
@@ -178,14 +194,27 @@ export default function FinalStep({
     }
   }, [campaignStarted, selectedInstances, instances, isProcessing, isPaused, instancesDisconnected, currentCampaignId, getToken]);
 
-  // Start AGGRESSIVE instance monitoring when campaign starts
+  // Initialize instance status tracking when campaign starts
   useEffect(() => {
-    if (campaignStarted && (isProcessing || isPaused)) {
+    if (campaignStarted && selectedInstances.length > 0) {
+      // Initialize the reference with current statuses
+      const initialStatuses: { [key: string]: string } = {};
+      selectedInstances.forEach(instanceId => {
+        const instance = instances.find(inst => inst._id === instanceId);
+        initialStatuses[instanceId] = instance?.whatsapp?.status || 'disconnected';
+      });
+      lastInstanceStatusRef.current = initialStatuses;
+    }
+  }, [campaignStarted, selectedInstances, instances]);
+
+  // Start ULTRA-AGGRESSIVE instance monitoring when campaign starts
+  useEffect(() => {
+    if (campaignStarted && isProcessing) {
       // Check immediately
       checkInstanceConnections();
       
-      // Set up VERY FREQUENT interval for INSTANT detection (every 1 second)
-      instanceCheckIntervalRef.current = setInterval(checkInstanceConnections, 1000);
+      // Set up ULTRA-FREQUENT interval for INSTANT detection (every 500ms)
+      instanceCheckIntervalRef.current = setInterval(checkInstanceConnections, 500);
       
       return () => {
         if (instanceCheckIntervalRef.current) {
@@ -193,8 +222,12 @@ export default function FinalStep({
           instanceCheckIntervalRef.current = null;
         }
       };
+    } else if (instanceCheckIntervalRef.current) {
+      // Clear interval when not processing
+      clearInterval(instanceCheckIntervalRef.current);
+      instanceCheckIntervalRef.current = null;
     }
-  }, [campaignStarted, isProcessing, isPaused, checkInstanceConnections]);
+  }, [campaignStarted, isProcessing, checkInstanceConnections]);
 
   // Cleanup interval on unmount
   useEffect(() => {
@@ -634,8 +667,8 @@ export default function FinalStep({
   // Determine if back button should be shown
   const shouldShowBackButton = !campaignStarted && onBack;
 
-  // Determine if resume button should be enabled
-  const canResume = isPaused && (canResumeAfterReconnect || !instancesDisconnected);
+  // Determine if resume button should be enabled - DISABLED if all instances disconnected
+  const canResume = isPaused && !instancesDisconnected && getConnectedInstancesCount() > 0;
 
   return (
     <div className="space-y-6">
@@ -643,30 +676,6 @@ export default function FinalStep({
         <h3 className="text-lg font-semibold text-zinc-200 mb-2">Final Review</h3>
         <p className="text-zinc-400 mb-6">Review your campaign details and send messages to all selected numbers.</p>
       </div>
-
-      {/* Instance Connection Status - Enhanced with instant feedback */}
-      {campaignStarted && (
-        <Card className={`${instancesDisconnected ? 'bg-red-500/10 border-red-500/20' : 'bg-green-500/10 border-green-500/20'}`}>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              {instancesDisconnected ? (
-                <WifiOff className="h-5 w-5 text-red-400" />
-              ) : (
-                <Wifi className="h-5 w-5 text-green-400" />
-              )}
-              <div>
-                <p className={`text-sm font-medium ${instancesDisconnected ? 'text-red-400' : 'text-green-400'}`}>
-                  {instancesDisconnected ? '🚨 All Instances Disconnected - Campaign Auto-Paused' : '✅ Instances Connected'}
-                </p>
-                <p className={`text-xs ${instancesDisconnected ? 'text-red-300' : 'text-green-300'}`}>
-                  {getConnectedInstancesCount()} of {selectedInstances.length} instances connected
-                  {disconnectionReason && ` - ${disconnectionReason}`}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Progress Stats */}
       {(isProcessing || isPaused || isCompleted) && (
@@ -781,7 +790,7 @@ export default function FinalStep({
                 className={`transition-all duration-75 ${
                   canResume 
                     ? 'bg-green-600/20 border-green-500 text-green-400 hover:bg-green-600/30' 
-                    : 'bg-gray-600/20 border-gray-500 text-gray-400 cursor-not-allowed'
+                    : 'bg-gray-600/20 border-gray-500 text-gray-400 cursor-not-allowed opacity-50'
                 }`}
                 disabled={isResumingRef.current || !canResume}
               >

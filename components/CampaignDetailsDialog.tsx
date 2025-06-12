@@ -46,7 +46,7 @@ export default function CampaignDetailsDialog({
   const [isPaused, setIsPaused] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<string>('all'); // 'all', 'sent', 'failed', 'not_exist', 'paused'
+  const [statusFilter, setStatusFilter] = useState<string>('all'); // 'all', 'sent', 'failed', 'not_exist'
   const [instances, setInstances] = useState<any[]>([]);
   const [selectedInstances, setSelectedInstances] = useState<string[]>([]);
   const [instancesDisconnected, setInstancesDisconnected] = useState(false);
@@ -548,24 +548,6 @@ export default function CampaignDetailsDialog({
       }
 
       setCampaignData((prev) => (prev ? { ...prev, status: 'paused' } : null));
-
-      // Update recipient statuses to show paused state for pending recipients
-      setRecipientStatuses((prev) => {
-        const newStatuses = [...prev];
-        const sentCount = campaignData?.sentMessages || 0;
-        const failedCount = campaignData?.failedMessages || 0;
-        const notExistCount = campaignData?.notExistMessages || 0;
-        const processedCount = sentCount + failedCount + notExistCount;
-
-        // Mark remaining recipients as paused
-        for (let i = processedCount; i < newStatuses.length; i++) {
-          if (newStatuses[i] === 'pending') {
-            newStatuses[i] = 'paused';
-          }
-        }
-
-        return newStatuses;
-      });
     },
     [campaignData]
   );
@@ -587,20 +569,6 @@ export default function CampaignDetailsDialog({
       isResumingRef.current = false;
 
       setCampaignData((prev) => (prev ? { ...prev, status: 'processing' } : null));
-
-      // Update recipient statuses to change paused back to pending for unprocessed recipients
-      setRecipientStatuses((prev) => {
-        const newStatuses = [...prev];
-        
-        // Change paused status back to pending for unprocessed recipients
-        for (let i = 0; i < newStatuses.length; i++) {
-          if (newStatuses[i] === 'paused') {
-            newStatuses[i] = 'pending';
-          }
-        }
-
-        return newStatuses;
-      });
     },
     [campaignData]
   );
@@ -832,8 +800,6 @@ export default function CampaignDetailsDialog({
         return 'bg-red-500/10 text-red-400';
       case 'not_exist':
         return 'bg-orange-500/10 text-orange-400';
-      case 'paused':
-        return 'bg-yellow-500/10 text-yellow-400';
       default:
         return 'bg-zinc-500/10 text-zinc-400';
     }
@@ -847,8 +813,6 @@ export default function CampaignDetailsDialog({
         return 'Failed';
       case 'not_exist':
         return 'Not on WhatsApp';
-      case 'paused':
-        return 'Paused';
       default:
         return 'Pending';
     }
@@ -888,7 +852,6 @@ export default function CampaignDetailsDialog({
   const sentCount = recipientStatuses.filter(status => status === 'sent').length;
   const failedCount = recipientStatuses.filter(status => status === 'failed').length;
   const notExistCount = recipientStatuses.filter(status => status === 'not_exist').length;
-  const pausedCount = recipientStatuses.filter(status => status === 'paused').length;
 
   // Get connected instances count
   const getConnectedInstancesCount = () => {
@@ -1103,20 +1066,6 @@ export default function CampaignDetailsDialog({
                       <AlertTriangle className="h-4 w-4 mr-2" />
                       Not on WhatsApp ({notExistCount})
                     </Button>
-                    {pausedCount > 0 && (
-                      <Button
-                        onClick={() => {
-                          setStatusFilter('paused');
-                          setCurrentPage(1);
-                        }}
-                        variant={statusFilter === 'paused' ? 'default' : 'outline'}
-                        size="sm"
-                        className={statusFilter === 'paused' ? 'bg-yellow-600 text-white' : 'bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700'}
-                      >
-                        <Pause className="h-4 w-4 mr-2" />
-                        Paused ({pausedCount})
-                      </Button>
-                    )}
                   </div>
                 </div>
 
@@ -1127,9 +1076,7 @@ export default function CampaignDetailsDialog({
                         <TableHead className="text-zinc-400">SN</TableHead>
                         <TableHead className="text-zinc-400">Name</TableHead>
                         <TableHead className="text-zinc-400">Phone</TableHead>
-                        {(isProcessing || isPaused ) && (
-                          <TableHead className="text-zinc-400">Status</TableHead>
-                        )}
+                        <TableHead className="text-zinc-400">Status</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1142,13 +1089,11 @@ export default function CampaignDetailsDialog({
                             <TableCell className="text-zinc-200">{globalIndex + 1}</TableCell>
                             <TableCell className="text-zinc-200 font-medium">{recipient.name}</TableCell>
                             <TableCell className="text-zinc-200">{recipient.phone}</TableCell>
-                            {(isProcessing || isPaused ) && (
-                              <TableCell>
-                                <span className={`text-xs px-2 py-1 rounded-full ${getStatusColor(status)}`}>
-                                  {getStatusText(status)}
-                                </span>
-                              </TableCell>
-                            )}
+                            <TableCell>
+                              <span className={`text-xs px-2 py-1 rounded-full ${getStatusColor(status)}`}>
+                                {getStatusText(status)}
+                              </span>
+                            </TableCell>
                           </TableRow>
                         );
                       })}
@@ -1166,7 +1111,6 @@ export default function CampaignDetailsDialog({
                             {statusFilter === 'sent' && 'Sent'}
                             {statusFilter === 'failed' && 'Failed'}
                             {statusFilter === 'not_exist' && 'Not on WhatsApp'}
-                            {statusFilter === 'paused' && 'Paused'}
                           </Badge>
                         )}
                       </span>

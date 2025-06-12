@@ -13,7 +13,7 @@ interface Campaign {
   _id: string;
   name: string;
   recipients: any[];
-  status: 'completed' | 'failed' | 'processing' | 'paused';
+  status: 'completed' | 'failed' | 'processing' | 'paused' | 'stopped';
   totalMessages: number;
   sentMessages: number;
   failedMessages: number;
@@ -44,6 +44,7 @@ export default function CampaignDetailsDialog({
   const [campaignData, setCampaignData] = useState<Campaign | null>(campaign);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [isStopped, setIsStopped] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('all'); // 'all', 'sent', 'failed', 'not_exist'
@@ -54,6 +55,7 @@ export default function CampaignDetailsDialog({
   const [canResumeAfterReconnect, setCanResumeAfterReconnect] = useState(false);
 
   const isStoppingRef = useRef(false);
+  const isPausingRef = useRef(false);
   const isResumingRef = useRef(false);
   const lastProgressUpdateRef = useRef<number>(0);
   const hasLoadedDetailsRef = useRef(false);
@@ -151,6 +153,7 @@ export default function CampaignDetailsDialog({
       setDisconnectionReason(`All ${disconnectedInstances.length} selected instance(s) disconnected`);
       setIsProcessing(false);
       setIsPaused(true);
+      setIsStopped(false);
       setCanResumeAfterReconnect(false);
       
       // Update campaign progress to show disconnection IMMEDIATELY
@@ -171,7 +174,7 @@ export default function CampaignDetailsDialog({
             },
             body: JSON.stringify({ 
               campaignId: campaignData._id,
-              action: 'stop'
+              action: 'pause'
             })
           }).catch(error => {
             console.error('Failed to send auto-pause signal:', error);
@@ -331,6 +334,7 @@ export default function CampaignDetailsDialog({
           setRecipientStatuses(statuses);
 
           setIsPaused(detailedCampaign.status === 'paused');
+          setIsStopped(detailedCampaign.status === 'stopped');
           setIsProcessing(detailedCampaign.status === 'processing');
           
           // Set campaign started flag for processing/paused campaigns
@@ -343,10 +347,10 @@ export default function CampaignDetailsDialog({
           }
 
           // Only schedule auto-refresh if campaign just completed and we haven't done it before
-          if (detailedCampaign.status === 'completed' && !hasCompletedRef.current && !autoRefreshTimeoutRef.current) {
+          if ((detailedCampaign.status === 'completed' || detailedCampaign.status === 'stopped') && !hasCompletedRef.current && !autoRefreshTimeoutRef.current) {
             hasCompletedRef.current = true;
             autoRefreshTimeoutRef.current = setTimeout(() => {
-              console.log('Final auto-refresh for completed campaign');
+              console.log('Final auto-refresh for completed/stopped campaign');
               loadCampaignDetails(campaignId, true);
               autoRefreshTimeoutRef.current = null;
             }, 2000);
@@ -366,8 +370,9 @@ export default function CampaignDetailsDialog({
     if (campaign && open && !hasLoadedDetailsRef.current) {
       setCampaignData(campaign);
       setIsPaused(campaign.status === 'paused');
+      setIsStopped(campaign.status === 'stopped');
       setIsProcessing(campaign.status === 'processing');
-      hasCompletedRef.current = campaign.status === 'completed';
+      hasCompletedRef.current = campaign.status === 'completed' || campaign.status === 'stopped';
       
       // Set campaign started flag for processing/paused campaigns
       if (campaign.status === 'processing' || campaign.status === 'paused') {
@@ -431,11 +436,13 @@ export default function CampaignDetailsDialog({
       if (data.status === 'completed') {
         setIsProcessing(false);
         setIsPaused(false);
+        setIsStopped(false);
         setInstancesDisconnected(false);
         setCanResumeAfterReconnect(false);
         campaignStarted.current = false;
         // Reset control flags when campaign completes
         isStoppingRef.current = false;
+        isPausingRef.current = false;
         isResumingRef.current = false;
         // Only auto-refresh if we haven't completed before
         if (!hasCompletedRef.current) {
@@ -444,18 +451,33 @@ export default function CampaignDetailsDialog({
             loadCampaignDetails(data.campaignId, true);
           }, 1000);
         }
+      } else if (data.status === 'stopped') {
+        setIsProcessing(false);
+        setIsPaused(false);
+        setIsStopped(true);
+        setInstancesDisconnected(false);
+        setCanResumeAfterReconnect(false);
+        campaignStarted.current = false;
+        // Reset control flags when campaign stops
+        isStoppingRef.current = false;
+        isPausingRef.current = false;
+        isResumingRef.current = false;
       } else if (data.status === 'processing') {
         setIsProcessing(true);
         setIsPaused(false);
+        setIsStopped(false);
         campaignStarted.current = true;
         // Reset control flags when campaign is processing
         isStoppingRef.current = false;
+        isPausingRef.current = false;
         isResumingRef.current = false;
       } else if (data.status === 'paused') {
         setIsProcessing(false);
         setIsPaused(true);
+        setIsStopped(false);
         // Reset control flags when campaign is paused
         isStoppingRef.current = false;
+        isPausingRef.current = false;
         isResumingRef.current = false;
       }
     },
@@ -482,11 +504,13 @@ export default function CampaignDetailsDialog({
 
       setIsProcessing(false);
       setIsPaused(false);
+      setIsStopped(false);
       setInstancesDisconnected(false);
       setCanResumeAfterReconnect(false);
       campaignStarted.current = false;
       // Reset control flags when campaign completes
       isStoppingRef.current = false;
+      isPausingRef.current = false;
       isResumingRef.current = false;
 
       // Update statuses on campaign completion and force refresh only once
@@ -528,6 +552,28 @@ export default function CampaignDetailsDialog({
     [campaignData, loadCampaignDetails]
   );
 
+  const handleCampaignStopped = useCallback(
+    (data: any) => {
+      if (!campaignData || data.campaignId !== campaignData._id) return;
+
+      console.log('Campaign stopped:', data);
+
+      setIsStopped(true);
+      setIsProcessing(false);
+      setIsPaused(false);
+      setInstancesDisconnected(false);
+      setCanResumeAfterReconnect(false);
+      campaignStarted.current = false;
+      // Reset control flags when campaign stops
+      isStoppingRef.current = false;
+      isPausingRef.current = false;
+      isResumingRef.current = false;
+
+      setCampaignData((prev) => (prev ? { ...prev, status: 'stopped' } : null));
+    },
+    [campaignData]
+  );
+
   const handleCampaignPaused = useCallback(
     (data: any) => {
       if (!campaignData || data.campaignId !== campaignData._id) return;
@@ -536,8 +582,10 @@ export default function CampaignDetailsDialog({
 
       setIsPaused(true);
       setIsProcessing(false);
+      setIsStopped(false);
       // Reset control flags when campaign is paused
       isStoppingRef.current = false;
+      isPausingRef.current = false;
       isResumingRef.current = false;
 
       // Handle disconnection-related pause
@@ -560,12 +608,14 @@ export default function CampaignDetailsDialog({
 
       setIsPaused(false);
       setIsProcessing(true);
+      setIsStopped(false);
       setInstancesDisconnected(false);
       setCanResumeAfterReconnect(false);
       setDisconnectionReason('');
       campaignStarted.current = true;
       // Reset control flags when campaign is resumed
       isStoppingRef.current = false;
+      isPausingRef.current = false;
       isResumingRef.current = false;
 
       setCampaignData((prev) => (prev ? { ...prev, status: 'processing' } : null));
@@ -582,6 +632,7 @@ export default function CampaignDetailsDialog({
 
     on('campaign.progress', handleCampaignProgress);
     on('campaign.complete', handleCampaignComplete);
+    on('campaign.stopped', handleCampaignStopped);
     on('campaign.paused', handleCampaignPaused);
     on('campaign.resumed', handleCampaignResumed);
 
@@ -589,11 +640,12 @@ export default function CampaignDetailsDialog({
       console.log('Cleaning up socket listeners for campaign:', campaignData._id);
       off('campaign.progress', handleCampaignProgress);
       off('campaign.complete', handleCampaignComplete);
+      off('campaign.stopped', handleCampaignStopped);
       off('campaign.paused', handleCampaignPaused);
       off('campaign.resumed', handleCampaignResumed);
       socketListenersSetupRef.current = false;
     };
-  }, [isConnected, campaignData?._id, on, off, handleCampaignProgress, handleCampaignComplete, handleCampaignPaused, handleCampaignResumed]);
+  }, [isConnected, campaignData?._id, on, off, handleCampaignProgress, handleCampaignComplete, handleCampaignStopped, handleCampaignPaused, handleCampaignResumed]);
 
   const refreshCampaignDetails = async () => {
     if (!campaignData || !token) return;
@@ -611,11 +663,12 @@ export default function CampaignDetailsDialog({
   };
 
   const handleCampaignControl = useCallback(
-    async (action: 'stop' | 'resume') => {
+    async (action: 'stop' | 'pause' | 'resume') => {
       if (!campaignData) return;
 
       // Prevent multiple simultaneous control actions
       if (action === 'stop' && isStoppingRef.current) return;
+      if (action === 'pause' && isPausingRef.current) return;
       if (action === 'resume' && isResumingRef.current) return;
 
       // For resume, check if instances are connected
@@ -633,6 +686,8 @@ export default function CampaignDetailsDialog({
       // Set control flags
       if (action === 'stop') {
         isStoppingRef.current = true;
+      } else if (action === 'pause') {
+        isPausingRef.current = true;
       } else {
         isResumingRef.current = true;
       }
@@ -640,11 +695,18 @@ export default function CampaignDetailsDialog({
       // INSTANT UI UPDATE - No waiting for server response
       if (action === 'stop') {
         setIsProcessing(false);
+        setIsPaused(false);
+        setIsStopped(true);
+        setCampaignData((prev) => (prev ? { ...prev, status: 'stopped' } : null));
+      } else if (action === 'pause') {
+        setIsProcessing(false);
         setIsPaused(true);
+        setIsStopped(false);
         setCampaignData((prev) => (prev ? { ...prev, status: 'paused' } : null));
       } else {
         setIsProcessing(true);
         setIsPaused(false);
+        setIsStopped(false);
         setInstancesDisconnected(false);
         setCanResumeAfterReconnect(false);
         setDisconnectionReason('');
@@ -682,11 +744,19 @@ export default function CampaignDetailsDialog({
           if (action === 'stop') {
             setIsProcessing(true);
             setIsPaused(false);
+            setIsStopped(false);
             isStoppingRef.current = false;
+            setCampaignData((prev) => (prev ? { ...prev, status: 'processing' } : null));
+          } else if (action === 'pause') {
+            setIsProcessing(true);
+            setIsPaused(false);
+            setIsStopped(false);
+            isPausingRef.current = false;
             setCampaignData((prev) => (prev ? { ...prev, status: 'processing' } : null));
           } else {
             setIsProcessing(false);
             setIsPaused(true);
+            setIsStopped(false);
             isResumingRef.current = false;
             campaignStarted.current = false;
             setCampaignData((prev) => (prev ? { ...prev, status: 'paused' } : null));
@@ -698,11 +768,19 @@ export default function CampaignDetailsDialog({
         if (action === 'stop') {
           setIsProcessing(true);
           setIsPaused(false);
+          setIsStopped(false);
           isStoppingRef.current = false;
+          setCampaignData((prev) => (prev ? { ...prev, status: 'processing' } : null));
+        } else if (action === 'pause') {
+          setIsProcessing(true);
+          setIsPaused(false);
+          setIsStopped(false);
+          isPausingRef.current = false;
           setCampaignData((prev) => (prev ? { ...prev, status: 'processing' } : null));
         } else {
           setIsProcessing(false);
           setIsPaused(true);
+          setIsStopped(false);
           isResumingRef.current = false;
           campaignStarted.current = false;
           setCampaignData((prev) => (prev ? { ...prev, status: 'paused' } : null));
@@ -713,6 +791,7 @@ export default function CampaignDetailsDialog({
   );
 
   const handleStopCampaign = useCallback(() => handleCampaignControl('stop'), [handleCampaignControl]);
+  const handlePauseCampaign = useCallback(() => handleCampaignControl('pause'), [handleCampaignControl]);
   const handleResumeCampaign = useCallback(() => handleCampaignControl('resume'), [handleCampaignControl]);
 
   // Reset all state when dialog closes
@@ -726,6 +805,7 @@ export default function CampaignDetailsDialog({
       setRecipientStatuses([]);
       setIsRefreshing(false);
       setIsPaused(false);
+      setIsStopped(false);
       setIsProcessing(false);
       setIsLoadingDetails(false);
       setStatusFilter('all');
@@ -736,6 +816,7 @@ export default function CampaignDetailsDialog({
       
       // Reset control flags when dialog closes
       isStoppingRef.current = false;
+      isPausingRef.current = false;
       isResumingRef.current = false;
       
       // Clear auto-refresh timeout when dialog closes
@@ -800,6 +881,8 @@ export default function CampaignDetailsDialog({
         return 'bg-red-500/10 text-red-400';
       case 'not_exist':
         return 'bg-orange-500/10 text-orange-400';
+      case 'stopped':
+        return 'bg-red-500/10 text-red-400';
       default:
         return 'bg-zinc-500/10 text-zinc-400';
     }
@@ -813,6 +896,8 @@ export default function CampaignDetailsDialog({
         return 'Failed';
       case 'not_exist':
         return 'Not on WhatsApp';
+      case 'stopped':
+        return 'Stopped';
       default:
         return 'Pending';
     }
@@ -828,6 +913,8 @@ export default function CampaignDetailsDialog({
         return 'text-blue-400';
       case 'paused':
         return 'text-yellow-400';
+      case 'stopped':
+        return 'text-red-400';
       default:
         return 'text-zinc-400';
     }
@@ -843,6 +930,8 @@ export default function CampaignDetailsDialog({
         return '⏳';
       case 'paused':
         return '⏸️';
+      case 'stopped':
+        return '🛑';
       default:
         return '❓';
     }
@@ -912,33 +1001,63 @@ export default function CampaignDetailsDialog({
             </div>
             <div className="flex gap-2">
               {isProcessing && (
-                <Button
-                  onClick={handleStopCampaign}
-                  disabled={isStoppingRef.current}
-                  variant="outline"
-                  size="sm"
-                  className="bg-red-600/20 border-red-500 text-red-400 hover:bg-red-600/30 transition-all duration-75"
-                >
-                  <Pause className="h-4 w-4 mr-2" />
-                  {isStoppingRef.current ? 'Pausing...' : 'Pause'}
-                </Button>
+                <>
+                  <Button
+                    onClick={handlePauseCampaign}
+                    disabled={isPausingRef.current}
+                    variant="outline"
+                    size="sm"
+                    className="bg-yellow-600/20 border-yellow-500 text-yellow-400 hover:bg-yellow-600/30 transition-all duration-75"
+                  >
+                    <Pause className="h-4 w-4 mr-2" />
+                    {isPausingRef.current ? 'Pausing...' : 'Pause'}
+                  </Button>
+                  <Button
+                    onClick={handleStopCampaign}
+                    disabled={isStoppingRef.current}
+                    variant="outline"
+                    size="sm"
+                    className="bg-red-600/20 border-red-500 text-red-400 hover:bg-red-600/30 transition-all duration-75"
+                  >
+                    <StopCircle className="h-4 w-4 mr-2" />
+                    {isStoppingRef.current ? 'Stopping...' : 'Stop'}
+                  </Button>
+                </>
               )}
               {isPaused && (
-                <Button
-                  onClick={handleResumeCampaign}
-                  disabled={isResumingRef.current || !canResume}
-                  variant="outline"
-                  size="sm"
-                  className={`transition-all duration-75 ${
-                    canResume 
-                      ? 'bg-green-600/20 border-green-500 text-green-400 hover:bg-green-600/30' 
-                      : 'bg-gray-600/20 border-gray-500 text-gray-400 cursor-not-allowed opacity-50'
-                  }`}
-                >
-                  <Play className="h-4 w-4 mr-2" />
-                  {isResumingRef.current ? 'Resuming...' : 
-                   !canResume && instancesDisconnected ? 'Waiting for Connection' : 'Resume'}
-                </Button>
+                <>
+                  <Button
+                    onClick={handleResumeCampaign}
+                    disabled={isResumingRef.current || !canResume}
+                    variant="outline"
+                    size="sm"
+                    className={`transition-all duration-75 ${
+                      canResume 
+                        ? 'bg-green-600/20 border-green-500 text-green-400 hover:bg-green-600/30' 
+                        : 'bg-gray-600/20 border-gray-500 text-gray-400 cursor-not-allowed opacity-50'
+                    }`}
+                  >
+                    <Play className="h-4 w-4 mr-2" />
+                    {isResumingRef.current ? 'Resuming...' : 
+                     !canResume && instancesDisconnected ? 'Waiting for Connection' : 'Resume'}
+                  </Button>
+                  <Button
+                    onClick={handleStopCampaign}
+                    disabled={isStoppingRef.current}
+                    variant="outline"
+                    size="sm"
+                    className="bg-red-600/20 border-red-500 text-red-400 hover:bg-red-600/30 transition-all duration-75"
+                  >
+                    <StopCircle className="h-4 w-4 mr-2" />
+                    {isStoppingRef.current ? 'Stopping...' : 'Stop'}
+                  </Button>
+                </>
+              )}
+              {isStopped && (
+                <div className="text-red-400 text-sm font-medium flex items-center gap-2">
+                  <StopCircle className="h-4 w-4" />
+                  Campaign Stopped
+                </div>
               )}
               <Button
                 onClick={refreshCampaignDetails}
@@ -971,6 +1090,23 @@ export default function CampaignDetailsDialog({
                   <p className={`text-xs ${connectionStatus.isConnected ? 'text-green-300' : 'text-red-300'}`}>
                     {connectionStatus.subMessage}
                     {disconnectionReason && ` - ${disconnectionReason}`}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Campaign Status Display */}
+          {isStopped && (
+            <div className="p-4 rounded-lg border bg-red-500/10 border-red-500/20">
+              <div className="flex items-center gap-3">
+                <StopCircle className="h-5 w-5 text-red-400" />
+                <div>
+                  <p className="text-sm font-medium text-red-400">
+                    🛑 Campaign Stopped
+                  </p>
+                  <p className="text-xs text-red-300">
+                    Campaign has been permanently stopped and cannot be resumed
                   </p>
                 </div>
               </div>

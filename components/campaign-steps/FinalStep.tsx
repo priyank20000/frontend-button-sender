@@ -29,11 +29,12 @@ interface CampaignProgress {
   sent: number;
   failed?: number;
   notExist?: number;
-  status: 'processing' | 'completed' | 'pending' | 'paused';
+  status: 'processing' | 'completed' | 'pending' | 'paused' | 'stopped';
   currentRecipient?: string;
-  lastMessageStatus?: 'sent' | 'failed' | 'not_exist' | 'paused' | 'ready_to_resume';
+  lastMessageStatus?: 'sent' | 'failed' | 'not_exist' | 'paused' | 'stopped' | 'ready_to_resume';
   lastRecipient?: string;
   canStop?: boolean;
+  canPause?: boolean;
   canResume?: boolean;
   instancesDisconnected?: boolean;
 }
@@ -53,6 +54,7 @@ export default function FinalStep({
 }: FinalStepProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
+  const [isStopped, setIsStopped] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [recipientsPerPage] = useState(10);
   const [campaignProgress, setCampaignProgress] = useState<CampaignProgress>({ 
@@ -77,6 +79,7 @@ export default function FinalStep({
   const router = useRouter();
   const abortControllerRef = useRef<AbortController | null>(null);
   const isStoppingRef = useRef(false);
+  const isPausingRef = useRef(false);
   const isResumingRef = useRef(false);
   const lastProgressUpdateRef = useRef<number>(0);
   const instanceCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -169,7 +172,7 @@ export default function FinalStep({
             },
             body: JSON.stringify({ 
               campaignId: currentCampaignId,
-              action: 'stop'
+              action: 'pause'
             })
           }).catch(error => {
             console.error('Failed to send auto-pause signal:', error);
@@ -274,6 +277,7 @@ export default function FinalStep({
       lastMessageStatus: data.lastMessageStatus,
       lastRecipient: data.lastRecipient,
       canStop: data.canStop,
+      canPause: data.canPause,
       canResume: data.canResume,
       instancesDisconnected: data.instancesDisconnected
     }));
@@ -299,19 +303,34 @@ export default function FinalStep({
       setIsProcessing(false);
       setIsCompleted(true);
       setIsPaused(false);
+      setIsStopped(false);
       setInstancesDisconnected(false);
       setCanResumeAfterReconnect(false);
       isStoppingRef.current = false;
+      isPausingRef.current = false;
+      isResumingRef.current = false;
+    } else if (data.status === 'stopped') {
+      setIsProcessing(false);
+      setIsStopped(true);
+      setIsPaused(false);
+      setInstancesDisconnected(false);
+      setCanResumeAfterReconnect(false);
+      isStoppingRef.current = false;
+      isPausingRef.current = false;
       isResumingRef.current = false;
     } else if (data.status === 'processing') {
       setIsProcessing(true);
       setIsPaused(false);
+      setIsStopped(false);
       isStoppingRef.current = false;
+      isPausingRef.current = false;
       isResumingRef.current = false;
     } else if (data.status === 'paused') {
       setIsProcessing(false);
       setIsPaused(true);
+      setIsStopped(false);
       isStoppingRef.current = false;
+      isPausingRef.current = false;
       isResumingRef.current = false;
     }
   }, [currentCampaignId, antdContacts]);
@@ -322,9 +341,11 @@ export default function FinalStep({
     setIsProcessing(false);
     setIsCompleted(true);
     setIsPaused(false);
+    setIsStopped(false);
     setInstancesDisconnected(false);
     setCanResumeAfterReconnect(false);
     isStoppingRef.current = false;
+    isPausingRef.current = false;
     isResumingRef.current = false;
     
     // Final count update
@@ -342,12 +363,33 @@ export default function FinalStep({
     }));
   }, [currentCampaignId]);
 
+  const handleCampaignStopped = useCallback((data: any) => {
+    if (data.campaignId !== currentCampaignId) return;
+    
+    setIsStopped(true);
+    setIsProcessing(false);
+    setIsPaused(false);
+    setInstancesDisconnected(false);
+    setCanResumeAfterReconnect(false);
+    isStoppingRef.current = false;
+    isPausingRef.current = false;
+    isResumingRef.current = false;
+    
+    setCampaignProgress(prev => ({
+      ...prev,
+      status: 'stopped',
+      instancesDisconnected: false
+    }));
+  }, [currentCampaignId]);
+
   const handleCampaignPaused = useCallback((data: any) => {
     if (data.campaignId !== currentCampaignId) return;
     
     setIsPaused(true);
     setIsProcessing(false);
+    setIsStopped(false);
     isStoppingRef.current = false;
+    isPausingRef.current = false;
     isResumingRef.current = false;
     
     // Handle disconnection-related pause
@@ -361,6 +403,7 @@ export default function FinalStep({
       ...prev,
       status: 'paused',
       canStop: data.canStop,
+      canPause: data.canPause,
       canResume: data.canResume,
       instancesDisconnected: data.instancesDisconnected
     }));
@@ -371,16 +414,19 @@ export default function FinalStep({
     
     setIsPaused(false);
     setIsProcessing(true);
+    setIsStopped(false);
     setInstancesDisconnected(false);
     setCanResumeAfterReconnect(false);
     setDisconnectionReason('');
     isStoppingRef.current = false;
+    isPausingRef.current = false;
     isResumingRef.current = false;
     
     setCampaignProgress(prev => ({
       ...prev,
       status: 'processing',
       canStop: data.canStop,
+      canPause: data.canPause,
       canResume: data.canResume,
       instancesDisconnected: false
     }));
@@ -392,16 +438,18 @@ export default function FinalStep({
 
     on('campaign.progress', handleCampaignProgress);
     on('campaign.complete', handleCampaignComplete);
+    on('campaign.stopped', handleCampaignStopped);
     on('campaign.paused', handleCampaignPaused);
     on('campaign.resumed', handleCampaignResumed);
 
     return () => {
       off('campaign.progress', handleCampaignProgress);
       off('campaign.complete', handleCampaignComplete);
+      off('campaign.stopped', handleCampaignStopped);
       off('campaign.paused', handleCampaignPaused);
       off('campaign.resumed', handleCampaignResumed);
     };
-  }, [isConnected, currentCampaignId, on, off, handleCampaignProgress, handleCampaignComplete, handleCampaignPaused, handleCampaignResumed]);
+  }, [isConnected, currentCampaignId, on, off, handleCampaignProgress, handleCampaignComplete, handleCampaignStopped, handleCampaignPaused, handleCampaignResumed]);
 
   const handleSendMessages = async () => {
     // Prevent multiple simultaneous requests
@@ -417,6 +465,7 @@ export default function FinalStep({
     setIsProcessing(true);
     setIsCompleted(false);
     setIsPaused(false);
+    setIsStopped(false);
     setCampaignStarted(true);
     setInstancesDisconnected(false);
     setCanResumeAfterReconnect(false);
@@ -523,12 +572,13 @@ export default function FinalStep({
     }
   };
 
-  // Enhanced campaign control with disconnect handling
-  const handleCampaignControl = useCallback(async (action: 'stop' | 'resume') => {
+  // Enhanced campaign control with separate stop and pause
+  const handleCampaignControl = useCallback(async (action: 'stop' | 'pause' | 'resume') => {
     if (!currentCampaignId) return;
     
     // Prevent multiple simultaneous control actions
     if (action === 'stop' && isStoppingRef.current) return;
+    if (action === 'pause' && isPausingRef.current) return;
     if (action === 'resume' && isResumingRef.current) return;
 
     // For resume, check if instances are connected
@@ -546,6 +596,8 @@ export default function FinalStep({
     // Set control flags
     if (action === 'stop') {
       isStoppingRef.current = true;
+    } else if (action === 'pause') {
+      isPausingRef.current = true;
     } else {
       isResumingRef.current = true;
     }
@@ -553,10 +605,16 @@ export default function FinalStep({
     // INSTANT UI UPDATE - No waiting for server response
     if (action === 'stop') {
       setIsProcessing(false);
+      setIsStopped(true);
+      setIsPaused(false);
+    } else if (action === 'pause') {
+      setIsProcessing(false);
       setIsPaused(true);
+      setIsStopped(false);
     } else {
       setIsProcessing(true);
       setIsPaused(false);
+      setIsStopped(false);
       setInstancesDisconnected(false);
       setCanResumeAfterReconnect(false);
       setDisconnectionReason('');
@@ -593,8 +651,12 @@ export default function FinalStep({
             // Revert UI state if server request failed
             if (action === 'stop') {
               setIsProcessing(true);
-              setIsPaused(false);
+              setIsStopped(false);
               isStoppingRef.current = false;
+            } else if (action === 'pause') {
+              setIsProcessing(true);
+              setIsPaused(false);
+              isPausingRef.current = false;
             } else {
               setIsProcessing(false);
               setIsPaused(true);
@@ -609,8 +671,12 @@ export default function FinalStep({
             // Revert UI state on error
             if (action === 'stop') {
               setIsProcessing(true);
-              setIsPaused(false);
+              setIsStopped(false);
               isStoppingRef.current = false;
+            } else if (action === 'pause') {
+              setIsProcessing(true);
+              setIsPaused(false);
+              isPausingRef.current = false;
             } else {
               setIsProcessing(false);
               setIsPaused(true);
@@ -624,8 +690,12 @@ export default function FinalStep({
       // Revert UI state on error
       if (action === 'stop') {
         setIsProcessing(true);
-        setIsPaused(false);
+        setIsStopped(false);
         isStoppingRef.current = false;
+      } else if (action === 'pause') {
+        setIsProcessing(true);
+        setIsPaused(false);
+        isPausingRef.current = false;
       } else {
         setIsProcessing(false);
         setIsPaused(true);
@@ -635,6 +705,7 @@ export default function FinalStep({
   }, [currentCampaignId, getToken, instancesDisconnected, instances, selectedInstances]);
 
   const handleStopCampaign = useCallback(() => handleCampaignControl('stop'), [handleCampaignControl]);
+  const handlePauseCampaign = useCallback(() => handleCampaignControl('pause'), [handleCampaignControl]);
   const handleResumeCampaign = useCallback(() => handleCampaignControl('resume'), [handleCampaignControl]);
 
   const handleComplete = () => {
@@ -698,7 +769,7 @@ export default function FinalStep({
       </div>
 
       {/* Progress Stats */}
-      {(isProcessing || isPaused || isCompleted) && (
+      {(isProcessing || isPaused || isStopped || isCompleted) && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <Card className="bg-blue-500/10 border-blue-500/20">
             <CardContent className="p-4">
@@ -758,15 +829,26 @@ export default function FinalStep({
                   </p>
                 </div>
               </div>
-              <Button
-                onClick={handleStopCampaign}
-                variant="outline"
-                className="bg-red-600/20 border-red-500 text-red-400 hover:bg-red-600/30 transition-all duration-75"
-                disabled={isStoppingRef.current}
-              >
-                <StopCircle className="h-4 w-4 mr-2" />
-                {isStoppingRef.current ? 'Stopping...' : 'Stop'}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  onClick={handlePauseCampaign}
+                  variant="outline"
+                  className="bg-yellow-600/20 border-yellow-500 text-yellow-400 hover:bg-yellow-600/30 transition-all duration-75"
+                  disabled={isPausingRef.current}
+                >
+                  <Pause className="h-4 w-4 mr-2" />
+                  {isPausingRef.current ? 'Pausing...' : 'Pause'}
+                </Button>
+                <Button
+                  onClick={handleStopCampaign}
+                  variant="outline"
+                  className="bg-red-600/20 border-red-500 text-red-400 hover:bg-red-600/30 transition-all duration-75"
+                  disabled={isStoppingRef.current}
+                >
+                  <StopCircle className="h-4 w-4 mr-2" />
+                  {isStoppingRef.current ? 'Stopping...' : 'Stop'}
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -790,7 +872,7 @@ export default function FinalStep({
                   <p className={`${instancesDisconnected ? 'text-orange-300' : 'text-yellow-300'}`}>
                     {instancesDisconnected 
                       ? 'Campaign automatically paused due to instance disconnection. Reconnect instances to resume.'
-                      : 'Campaign has been paused. Click resume to continue.'
+                      : 'Campaign has been paused. Click resume to continue or stop to end the campaign.'
                     }
                   </p>
                   <p className={`text-sm mt-1 ${instancesDisconnected ? 'text-orange-200' : 'text-yellow-200'}`}>
@@ -804,20 +886,51 @@ export default function FinalStep({
                   )}
                 </div>
               </div>
-              <Button
-                onClick={handleResumeCampaign}
-                variant="outline"
-                className={`transition-all duration-75 ${
-                  canResume 
-                    ? 'bg-green-600/20 border-green-500 text-green-400 hover:bg-green-600/30' 
-                    : 'bg-gray-600/20 border-gray-500 text-gray-400 cursor-not-allowed opacity-50'
-                }`}
-                disabled={isResumingRef.current || !canResume}
-              >
-                <Play className="h-4 w-4 mr-2" />
-                {isResumingRef.current ? 'Resuming...' : 
-                 !canResume && instancesDisconnected ? 'Waiting for Connection' : 'Resume'}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleResumeCampaign}
+                  variant="outline"
+                  className={`transition-all duration-75 ${
+                    canResume 
+                      ? 'bg-green-600/20 border-green-500 text-green-400 hover:bg-green-600/30' 
+                      : 'bg-gray-600/20 border-gray-500 text-gray-400 cursor-not-allowed opacity-50'
+                  }`}
+                  disabled={isResumingRef.current || !canResume}
+                >
+                  <Play className="h-4 w-4 mr-2" />
+                  {isResumingRef.current ? 'Resuming...' : 
+                   !canResume && instancesDisconnected ? 'Waiting for Connection' : 'Resume'}
+                </Button>
+                <Button
+                  onClick={handleStopCampaign}
+                  variant="outline"
+                  className="bg-red-600/20 border-red-500 text-red-400 hover:bg-red-600/30 transition-all duration-75"
+                  disabled={isStoppingRef.current}
+                >
+                  <StopCircle className="h-4 w-4 mr-2" />
+                  {isStoppingRef.current ? 'Stopping...' : 'Stop'}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Stopped State */}
+      {isStopped && (
+        <Card className="bg-red-500/10 border-red-500/20">
+          <CardContent className="p-6">
+            <div className="flex items-center gap-3">
+              <StopCircle className="h-8 w-8 text-red-500" />
+              <div>
+                <h3 className="text-red-400 font-semibold text-lg">Campaign Stopped</h3>
+                <p className="text-red-300">
+                  Campaign has been stopped completely.
+                </p>
+                <p className="text-red-200 text-sm mt-1">
+                  Final Results - Sent: {campaignProgress.sent} | Failed: {campaignProgress.failed || 0} | Not on WhatsApp: {campaignProgress.notExist || 0}
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -853,7 +966,7 @@ export default function FinalStep({
                   <TableHead className="text-zinc-400">SN</TableHead>
                   <TableHead className="text-zinc-400">Name</TableHead>
                   <TableHead className="text-zinc-400">Phone</TableHead>
-                  {(isProcessing || isPaused || isCompleted) && (
+                  {(isProcessing || isPaused || isStopped || isCompleted) && (
                     <TableHead className="text-zinc-400">Status</TableHead>
                   )}
                 </TableRow>
@@ -870,19 +983,21 @@ export default function FinalStep({
                       </TableCell>
                       <TableCell className="text-zinc-200 font-medium">{contact.name}</TableCell>
                       <TableCell className="text-zinc-200">{contact.number}</TableCell>
-                      {(isProcessing || isPaused || isCompleted) && (
+                      {(isProcessing || isPaused || isStopped || isCompleted) && (
                         <TableCell>
                           <span className={`text-xs px-2 py-1 rounded-full ${
                             recipientStatus === 'sent' ? 'bg-green-500/10 text-green-400' :
                             recipientStatus === 'failed' ? 'bg-red-500/10 text-red-400' :
                             recipientStatus === 'not_exist' ? 'bg-orange-500/10 text-orange-400' :
                             recipientStatus === 'paused' ? 'bg-yellow-500/10 text-yellow-400' :
+                            recipientStatus === 'stopped' ? 'bg-red-500/10 text-red-400' :
                             'bg-zinc-500/10 text-zinc-400'
                           }`}>
                             {recipientStatus === 'sent' ? 'Sent' :
                              recipientStatus === 'failed' ? 'Failed' :
                              recipientStatus === 'not_exist' ? 'Not on WhatsApp' :
                              recipientStatus === 'paused' ? 'Paused' :
+                             recipientStatus === 'stopped' ? 'Stopped' :
                              'Pending'}
                           </span>
                         </TableCell>
@@ -990,7 +1105,7 @@ export default function FinalStep({
         </div>
         
         <div className="flex gap-3">
-          {!isCompleted && !isProcessing && !isPaused && (
+          {!isCompleted && !isStopped && !isProcessing && !isPaused && (
             <Button
               onClick={handleSendMessages}
               disabled={isLoading || isSending}
@@ -1027,6 +1142,16 @@ export default function FinalStep({
             >
               <Pause className="h-4 w-4 mr-2" />
               Paused
+            </Button>
+          )}
+
+          {isStopped && (
+            <Button
+              onClick={handleComplete}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              <StopCircle className="h-4 w-4 mr-2" />
+              Campaign Stopped - Close
             </Button>
           )}
           

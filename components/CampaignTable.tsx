@@ -19,7 +19,7 @@ interface Campaign {
   };
   instances: any[];
   recipients: any[];
-  status: 'completed' | 'failed' | 'processing' | 'paused';
+  status: 'completed' | 'failed' | 'processing' | 'paused' | 'stopped';
   totalMessages: number;
   sentMessages: number;
   failedMessages: number;
@@ -39,7 +39,8 @@ const CAMPAIGN_STATUS = {
   completed: { label: 'Completed', color: 'bg-green-500', icon: CheckCircle },
   failed: { label: 'Failed', color: 'bg-red-500', icon: XCircle },
   processing: { label: 'Processing', color: 'bg-blue-500', icon: Clock },
-  paused: { label: 'Paused', color: 'bg-yellow-500', icon: Pause }
+  paused: { label: 'Paused', color: 'bg-yellow-500', icon: Pause },
+  stopped: { label: 'Stopped', color: 'bg-red-500', icon: StopCircle }
 };
 
 // Memoized row component to prevent unnecessary re-renders
@@ -124,6 +125,21 @@ const CampaignRow = memo(({
       onCampaignUpdate?.(updatedCampaign);
     };
 
+    const handleCampaignStopped = (data: any) => {
+      if (data.campaignId !== localCampaign._id) return;
+
+      console.log('Campaign stopped for row:', data);
+
+      const updatedCampaign = {
+        ...localCampaign,
+        status: 'stopped' as const
+      };
+
+      setLocalCampaign(updatedCampaign);
+      onCampaignUpdate?.(updatedCampaign);
+      setIsControlling(false);
+    };
+
     const handleCampaignPaused = (data: any) => {
       if (data.campaignId !== localCampaign._id) return;
 
@@ -156,26 +172,36 @@ const CampaignRow = memo(({
 
     on('campaign.progress', handleCampaignProgress);
     on('campaign.complete', handleCampaignComplete);
+    on('campaign.stopped', handleCampaignStopped);
     on('campaign.paused', handleCampaignPaused);
     on('campaign.resumed', handleCampaignResumed);
 
     return () => {
       off('campaign.progress', handleCampaignProgress);
       off('campaign.complete', handleCampaignComplete);
+      off('campaign.stopped', handleCampaignStopped);
       off('campaign.paused', handleCampaignPaused);
       off('campaign.resumed', handleCampaignResumed);
     };
   }, [isConnected, localCampaign._id, on, off, onCampaignUpdate]);
 
   // Campaign control function
-  const handleCampaignControl = useCallback(async (action: 'stop' | 'resume') => {
+  const handleCampaignControl = useCallback(async (action: 'stop' | 'pause' | 'resume') => {
     if (isControlling) return;
 
     setIsControlling(true);
     
     // Optimistic UI update
-    const newStatus = action === 'stop' ? 'paused' : 'processing';
-    const updatedCampaign = { ...localCampaign, status: newStatus as any };
+    let newStatus: Campaign['status'];
+    if (action === 'stop') {
+      newStatus = 'stopped';
+    } else if (action === 'pause') {
+      newStatus = 'paused';
+    } else {
+      newStatus = 'processing';
+    }
+    
+    const updatedCampaign = { ...localCampaign, status: newStatus };
     setLocalCampaign(updatedCampaign);
     onCampaignUpdate?.(updatedCampaign);
 
@@ -231,31 +257,101 @@ const CampaignRow = memo(({
           <Icon className="h-3 w-3" />
           {statusInfo.label}
         </Badge>
-        {(status === 'processing' || status === 'paused') && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleCampaignControl(status === 'processing' ? 'stop' : 'resume')}
-                  disabled={isControlling}
-                  className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 h-6 w-6 p-0"
-                >
-                  {isControlling ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : status === 'processing' ? (
-                    <StopCircle className="h-3 w-3" />
-                  ) : (
-                    <Play className="h-3 w-3" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{status === 'processing' ? 'Stop Campaign' : 'Resume Campaign'}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+        {status === 'processing' && (
+          <div className="flex gap-1">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleCampaignControl('pause')}
+                    disabled={isControlling}
+                    className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 h-6 w-6 p-0"
+                  >
+                    {isControlling ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Pause className="h-3 w-3" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Pause Campaign</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleCampaignControl('stop')}
+                    disabled={isControlling}
+                    className="text-zinc-400 hover:text-red-400 hover:bg-red-500/10 h-6 w-6 p-0"
+                  >
+                    {isControlling ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <StopCircle className="h-3 w-3" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Stop Campaign</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        )}
+        {status === 'paused' && (
+          <div className="flex gap-1">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleCampaignControl('resume')}
+                    disabled={isControlling}
+                    className="text-zinc-400 hover:text-green-400 hover:bg-green-500/10 h-6 w-6 p-0"
+                  >
+                    {isControlling ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <Play className="h-3 w-3" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Resume Campaign</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleCampaignControl('stop')}
+                    disabled={isControlling}
+                    className="text-zinc-400 hover:text-red-400 hover:bg-red-500/10 h-6 w-6 p-0"
+                  >
+                    {isControlling ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <StopCircle className="h-3 w-3" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Stop Campaign</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
         )}
       </div>
     );

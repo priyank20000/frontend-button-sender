@@ -540,8 +540,8 @@ export default function SelectAudience({
             scroll={{ x: 960 }}
             pagination={{
               pageSize: 10,
-              showSizeChanger: true,
-              showQuickJumper: true,
+              // showSizeChanger: true,
+              // showQuickJumper: true,
               showTotal: (total, range) =>
                 `${range[0]}-${range[1]} of ${total} items`,
               style: {
@@ -551,7 +551,7 @@ export default function SelectAudience({
             bordered
             size="middle"
             style={{
-              backgroundColor: '#27272a',
+              backgroundColor: '#27272a'
             }}
             className="custom-table"
             rowKey="key"
@@ -806,6 +806,7 @@ export default function SelectAudience({
         .custom-table .ant-pagination .ant-pagination-item {
           background-color: #18181b !important;
           border-color: #3f3f46 !important;
+          margin: 0 4px !important;
         }
         
         .custom-table .ant-pagination .ant-pagination-item a {

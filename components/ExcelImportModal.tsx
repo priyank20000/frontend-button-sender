@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from 'react';
@@ -6,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Upload } from 'lucide-react';
+import { Upload, ChevronLeft, ChevronRight } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { message as antMessage } from 'antd';
 
@@ -17,7 +18,7 @@ interface ExcelImportModalProps {
   setAntdContacts: (contacts: any[]) => void;
   setRecipients: (recipients: any[]) => void;
   showToast: (message: string, type?: 'success' | 'error' | 'info' | 'warning') => void;
-  setNumVariables: (num: number) => void; // New prop to update numVariables
+  setNumVariables: (num: number) => void;
 }
 
 interface ExcelRow {
@@ -41,6 +42,9 @@ export default function ExcelImportModal({
     name: '',
     phone: '',
   });
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 12; // 12 fields per page
+  const maxFields = 32; // Limit to 32 fields (name, phone, and up to 30 variables)
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -76,12 +80,14 @@ export default function ExcelImportModal({
         const headers = jsonData[0].map((header, idx) => header || `Column ${idx + 1}`);
         setExcelHeaders(headers);
 
-        // Initialize column mappings dynamically based on headers
+        // Cap variables at 30 (so total fields <= 32 with name and phone)
+        // Ensure at least 10 variables
+        const maxVars = Math.min(Math.max(headers.length - 2, 10), 30);
         const initialMappings = {
           name: '',
           phone: '',
           ...Object.fromEntries(
-            headers.slice(2).map((_, idx) => [`var${idx + 1}`, ''])
+            Array.from({ length: maxVars }, (_, idx) => [`var${idx + 1}`, ''])
           )
         };
         setColumnMappings(initialMappings);
@@ -96,10 +102,15 @@ export default function ExcelImportModal({
         setExcelData(rows);
         setIsExcelDataLoaded(true);
         setShowColumnMapping(true);
+        setCurrentPage(1);
 
         // Update numVariables in parent component
-        const numVars = headers.length - 2; // Subtract name and phone columns
-        setNumVariables(numVars > 0 ? numVars : 1);
+        setNumVariables(maxVars);
+
+        // Warn if columns were truncated
+        if (headers.length - 2 > 30) {
+          showToast(`Excel file has ${headers.length} columns, but only the first 30 variables (plus name and phone) can be mapped.`, 'warning');
+        }
       } catch (err) {
         showToast('Error parsing file: The file may be corrupted or in an unsupported format.', 'error');
         console.error(err);
@@ -127,6 +138,7 @@ export default function ExcelImportModal({
       return;
     }
 
+    const numVars = Object.keys(columnMappings).filter(key => key.startsWith('var')).length;
     const newContacts = excelData.map((row, index) => {
       const contact: any = {
         key: (Date.now() + index).toString(),
@@ -153,9 +165,10 @@ export default function ExcelImportModal({
       phone: contact.number,
       name: contact.name,
       variables: Object.fromEntries(
-        Object.keys(columnMappings)
-          .filter(key => key.startsWith('var'))
-          .map(key => [key, contact[key] || ''])
+        Array.from({ length: numVars }, (_, i) => [
+          `var${i + 1}`,
+          contact[`var${i + 1}`] || ''
+        ])
       )
     }));
     setRecipients(updatedRecipients);
@@ -167,6 +180,7 @@ export default function ExcelImportModal({
     setIsExcelDataLoaded(false);
     setShowColumnMapping(false);
     setColumnMappings({ name: '', phone: '' });
+    setCurrentPage(1);
     antMessage.success('Contacts imported successfully');
   };
 
@@ -177,7 +191,16 @@ export default function ExcelImportModal({
     setIsExcelDataLoaded(false);
     setShowColumnMapping(false);
     setColumnMappings({ name: '', phone: '' });
+    setCurrentPage(1);
   };
+
+  // Pagination logic for column mapping
+  const allFields = ['name', 'phone', ...Object.keys(columnMappings).filter(field => field.startsWith('var'))];
+  const totalPages = Math.ceil(allFields.length / itemsPerPage);
+  // Ensure first page includes name, phone, and var1 to var10
+  const paginatedFields = currentPage === 1
+    ? allFields.slice(0, Math.min(itemsPerPage, allFields.length))
+    : allFields.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -260,7 +283,7 @@ export default function ExcelImportModal({
             <div className="space-y-4">
               <Label className="text-zinc-400 font-medium">Map Columns</Label>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {Object.keys(columnMappings).map(field => (
+                {paginatedFields.map(field => (
                   <div key={field} className="space-y-2">
                     <Label className="text-zinc-400">
                       {field === 'name' ? 'Name *' : field === 'phone' ? 'Phone *' : `Variable ${field.slice(3)}`}
@@ -282,6 +305,30 @@ export default function ExcelImportModal({
                   </div>
                 ))}
               </div>
+
+              {totalPages > 1 && (
+                <div className="flex justify-center items-center space-x-4 mt-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="text-zinc-400">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                    disabled={currentPage === totalPages}
+                    className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
               
               <div className="flex justify-end space-x-4">
                 <Button

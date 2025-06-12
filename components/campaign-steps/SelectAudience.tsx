@@ -156,7 +156,7 @@ export default function SelectAudience({
     {
       title: 'Action',
       key: 'action',
-      width: 200,
+      width: 100,
       fixed: 'right' as const,
       render: (_: any, record: any) => (
         <div className="flex gap-2">
@@ -173,6 +173,15 @@ export default function SelectAudience({
           >
             Delete
           </AntButton>
+        </div>
+      ),
+    },
+    {
+      title: 'Setting',
+      width: 70,
+      fixed: 'right' as const,
+      render: (_: any, record: any) => (
+        <div className="flex gap-2">
           <AntButton
             type="link"
             icon={<Settings />}
@@ -180,11 +189,10 @@ export default function SelectAudience({
             style={{ color: '#3b82f6' }}
             onClick={() => setIsVariableDialogOpen(true)}
           >
-          
           </AntButton>
         </div>
       ),
-    },
+    }
   ];
 
   // Handle downloading sample Excel file
@@ -321,7 +329,7 @@ export default function SelectAudience({
           ])
         )
       }));
-    setRecipients(updatedRecipients);
+      setRecipients(updatedRecipients);
 
       setIsContactDialogOpen(false);
       contactForm.resetFields();
@@ -690,7 +698,7 @@ export default function SelectAudience({
               className="space-y-4"
             >
               <Form.Item
-                label={<span className="text-zinc-400">Number of Variables (1-30)</span>}
+                label={<span className="text-zinc-400">Number of Variables (10-30)</span>}
                 name="numVariables"
                 initialValue={numVariables}
                 rules={[
@@ -698,8 +706,8 @@ export default function SelectAudience({
                   {
                     validator: (_, value) => {
                       const num = parseInt(value, 10);
-                      if (isNaN(num) || num < 1 || num > 30) {
-                        return Promise.reject('Number of variables must be between 1 and 30');
+                      if (isNaN(num) || num < 10 || num > 30) {
+                        return Promise.reject('Number of variables must be between 10 and 30');
                       }
                       return Promise.resolve();
                     }
@@ -708,7 +716,7 @@ export default function SelectAudience({
               >
                 <Input
                   type="number"
-                  placeholder="Enter number of variables (1-30)"
+                  placeholder="Enter number of variables (10-30)"
                   className="bg-zinc-900 border-zinc-700 text-zinc-200 focus:border-blue-500"
                 />
               </Form.Item>
@@ -761,8 +769,7 @@ export default function SelectAudience({
           setAntdContacts={setAntdContacts}
           setRecipients={setRecipients}
           showToast={showToast}
-          // onDownloadSampleExcel={handleDownloadSampleExcel}
-          // onDownloadSampleCSV={handleDownloadSampleCSV}
+          setNumVariables={setNumVariables} // Pass setNumVariables
         />
       </div>
 

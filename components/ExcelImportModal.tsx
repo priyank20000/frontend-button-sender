@@ -17,6 +17,7 @@ interface ExcelImportModalProps {
   setAntdContacts: (contacts: any[]) => void;
   setRecipients: (recipients: any[]) => void;
   showToast: (message: string, type?: 'success' | 'error' | 'info' | 'warning') => void;
+  setNumVariables: (num: number) => void; // New prop to update numVariables
 }
 
 interface ExcelRow {
@@ -29,7 +30,8 @@ export default function ExcelImportModal({
   antdContacts,
   setAntdContacts,
   setRecipients,
-  showToast
+  showToast,
+  setNumVariables
 }: ExcelImportModalProps) {
   const [excelData, setExcelData] = useState<ExcelRow[]>([]);
   const [excelHeaders, setExcelHeaders] = useState<string[]>([]);
@@ -38,16 +40,6 @@ export default function ExcelImportModal({
   const [columnMappings, setColumnMappings] = useState<{ [key: string]: string }>({
     name: '',
     phone: '',
-    var1: '',
-    var2: '',
-    var3: '',
-    var4: '',
-    var5: '',
-    var6: '',
-    var7: '',
-    var8: '',
-    var9: '',
-    var10: ''
   });
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -84,6 +76,16 @@ export default function ExcelImportModal({
         const headers = jsonData[0].map((header, idx) => header || `Column ${idx + 1}`);
         setExcelHeaders(headers);
 
+        // Initialize column mappings dynamically based on headers
+        const initialMappings = {
+          name: '',
+          phone: '',
+          ...Object.fromEntries(
+            headers.slice(2).map((_, idx) => [`var${idx + 1}`, ''])
+          )
+        };
+        setColumnMappings(initialMappings);
+
         const rows = jsonData.slice(1).map((row) =>
           row.reduce((obj, value, idx) => {
             obj[headers[idx]] = value?.toString() || '';
@@ -94,6 +96,10 @@ export default function ExcelImportModal({
         setExcelData(rows);
         setIsExcelDataLoaded(true);
         setShowColumnMapping(true);
+
+        // Update numVariables in parent component
+        const numVars = headers.length - 2; // Subtract name and phone columns
+        setNumVariables(numVars > 0 ? numVars : 1);
       } catch (err) {
         showToast('Error parsing file: The file may be corrupted or in an unsupported format.', 'error');
         console.error(err);
@@ -122,22 +128,21 @@ export default function ExcelImportModal({
     }
 
     const newContacts = excelData.map((row, index) => {
-      return {
+      const contact: any = {
         key: (Date.now() + index).toString(),
         sn: antdContacts.length + index + 1,
         name: row[columnMappings.name] || '',
         number: row[columnMappings.phone] || '',
-        var1: columnMappings.var1 && row[columnMappings.var1] ? row[columnMappings.var1] : '',
-        var2: columnMappings.var2 && row[columnMappings.var2] ? row[columnMappings.var2] : '',
-        var3: columnMappings.var3 && row[columnMappings.var3] ? row[columnMappings.var3] : '',
-        var4: columnMappings.var4 && row[columnMappings.var4] ? row[columnMappings.var4] : '',
-        var5: columnMappings.var5 && row[columnMappings.var5] ? row[columnMappings.var5] : '',
-        var6: columnMappings.var6 && row[columnMappings.var6] ? row[columnMappings.var6] : '',
-        var7: columnMappings.var7 && row[columnMappings.var7] ? row[columnMappings.var7] : '',
-        var8: columnMappings.var8 && row[columnMappings.var8] ? row[columnMappings.var8] : '',
-        var9: columnMappings.var9 && row[columnMappings.var9] ? row[columnMappings.var9] : '',
-        var10: columnMappings.var10 && row[columnMappings.var10] ? row[columnMappings.var10] : '',
       };
+
+      // Add variables dynamically
+      Object.keys(columnMappings).forEach((key) => {
+        if (key.startsWith('var') && columnMappings[key]) {
+          contact[key] = row[columnMappings[key]] || '';
+        }
+      });
+
+      return contact;
     }).filter(contact => contact.name && contact.number);
 
     const updatedContacts = [...antdContacts, ...newContacts];
@@ -147,18 +152,11 @@ export default function ExcelImportModal({
     const updatedRecipients = updatedContacts.map(contact => ({
       phone: contact.number,
       name: contact.name,
-      variables: {
-        var1: contact.var1,
-        var2: contact.var2,
-        var3: contact.var3,
-        var4: contact.var4,
-        var5: contact.var5,
-        var6: contact.var6,
-        var7: contact.var7,
-        var8: contact.var8,
-        var9: contact.var9,
-        var10: contact.var10,
-      }
+      variables: Object.fromEntries(
+        Object.keys(columnMappings)
+          .filter(key => key.startsWith('var'))
+          .map(key => [key, contact[key] || ''])
+      )
     }));
     setRecipients(updatedRecipients);
     
@@ -168,20 +166,7 @@ export default function ExcelImportModal({
     setExcelHeaders([]);
     setIsExcelDataLoaded(false);
     setShowColumnMapping(false);
-    setColumnMappings({
-      name: '',
-      phone: '',
-      var1: '',
-      var2: '',
-      var3: '',
-      var4: '',
-      var5: '',
-      var6: '',
-      var7: '',
-      var8: '',
-      var9: '',
-      var10: ''
-    });
+    setColumnMappings({ name: '', phone: '' });
     antMessage.success('Contacts imported successfully');
   };
 
@@ -191,20 +176,7 @@ export default function ExcelImportModal({
     setExcelHeaders([]);
     setIsExcelDataLoaded(false);
     setShowColumnMapping(false);
-    setColumnMappings({
-      name: '',
-      phone: '',
-      var1: '',
-      var2: '',
-      var3: '',
-      var4: '',
-      var5: '',
-      var6: '',
-      var7: '',
-      var8: '',
-      var9: '',
-      var10: ''
-    });
+    setColumnMappings({ name: '', phone: '' });
   };
 
   return (
@@ -288,9 +260,11 @@ export default function ExcelImportModal({
             <div className="space-y-4">
               <Label className="text-zinc-400 font-medium">Map Columns</Label>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {['name', 'phone', ...Array.from({ length: 10 }, (_, i) => `var${i + 1}`)].map(field => (
+                {Object.keys(columnMappings).map(field => (
                   <div key={field} className="space-y-2">
-                    <Label className="text-zinc-400">{field === 'name' ? 'Name *' : field === 'phone' ? 'Phone *' : `Variable ${field.slice(3)}`}</Label>
+                    <Label className="text-zinc-400">
+                      {field === 'name' ? 'Name *' : field === 'phone' ? 'Phone *' : `Variable ${field.slice(3)}`}
+                    </Label>
                     <Select
                       value={columnMappings[field]}
                       onValueChange={(value) => handleColumnMappingChange(field, value)}

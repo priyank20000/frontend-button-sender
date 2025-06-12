@@ -347,8 +347,8 @@ export default function SelectAudience({
     try {
       const values = await variableForm.validateFields();
       const newNumVariables = parseInt(values.numVariables, 10);
-      if (newNumVariables < 1 || newNumVariables > 30) {
-        antMessage.error('Number of variables must be between 1 and 30');
+      if (newNumVariables < 10 || newNumVariables > 30) {
+        antMessage.error('Number of variables must be between 10 and 30');
         return;
       }
       setNumVariables(newNumVariables);
@@ -610,8 +610,8 @@ export default function SelectAudience({
                   {
                     validator: (_, value) => {
                       const num = parseInt(value, 10);
-                      if (isNaN(num) || num < 1 || num > 30) {
-                        return Promise.reject('Number of variables must be between 1 and 30');
+                      if (isNaN(num) || num < 10 || num > 30) {
+                        return Promise.reject('Number of variables must be between 10 and 30');
                       }
                       return Promise.resolve();
                     }

@@ -761,8 +761,8 @@ export default function SelectAudience({
           setAntdContacts={setAntdContacts}
           setRecipients={setRecipients}
           showToast={showToast}
-          onDownloadSampleExcel={handleDownloadSampleExcel}
-          onDownloadSampleCSV={handleDownloadSampleCSV}
+          // onDownloadSampleExcel={handleDownloadSampleExcel}
+          // onDownloadSampleCSV={handleDownloadSampleCSV}
         />
       </div>
 

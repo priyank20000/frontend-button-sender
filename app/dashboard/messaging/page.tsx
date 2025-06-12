@@ -166,7 +166,7 @@ export default function MessagingPage() {
     localStorage.removeItem('token');
     Cookies.remove('user', { path: '/', secure: window.location.protocol === 'https:', sameSite: 'Lax' });
     localStorage.removeItem('user');
-    router.push('/login');
+    router.push('/');
   };
 
   // Handle campaign updates from real-time events
@@ -234,7 +234,7 @@ export default function MessagingPage() {
   const fetchData = useCallback(async (showLoader = true) => {
     const token = await getToken();
     if (!token) {
-      router.push('/login');
+      router.push('/');
       return;
     }
 
@@ -356,18 +356,19 @@ export default function MessagingPage() {
     await fetchData(false);
   };
 
-  // Campaign operations
+  // Campaign operations - Updated delete function to use correct API endpoint
   const handleDeleteCampaign = async (campaignId: string) => {
     const token = await getToken();
     if (!token) {
       showToast('Please log in to delete campaign', 'error');
-      router.push('/login');
+      router.push('/');
       return;
     }
 
     setIsDeleting(prev => ({ ...prev, [campaignId]: true }));
     try {
-      const response = await fetch('https://whatsapp.recuperafly.com/api/campaigns/delete', {
+      // Updated API endpoint to use /message/delete
+      const response = await fetch('https://whatsapp.recuperafly.com/api/template/message/delete', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -412,7 +413,7 @@ export default function MessagingPage() {
   const handleSendCampaign = async () => {
     const token = await getToken();
     if (!token) {
-      router.push('/login');
+      router.push('/');
       return;
     }
 

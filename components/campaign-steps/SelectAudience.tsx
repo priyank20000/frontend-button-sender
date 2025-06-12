@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Upload, Users, Trash2, Plus, FileText, Eraser, Download } from 'lucide-react';
+import { Upload, Users, Trash2, Plus, FileText, Eraser, Download, Settings } from 'lucide-react';
 import { ConfigProvider, Table as AntTable, Button as AntButton, Form, message as antMessage } from 'antd';
 import { DeleteOutlined } from '@ant-design/icons';
 import ExcelImportModal from '../ExcelImportModal';
@@ -27,11 +27,15 @@ export default function SelectAudience({
 }: SelectAudienceProps) {
   const [isContactDialogOpen, setIsContactDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isVariableDialogOpen, setIsVariableDialogOpen] = useState(false);
+  const [isDownloadDialogOpen, setIsDownloadDialogOpen] = useState(false);
   const [deleteContactKey, setDeleteContactKey] = useState<string | null>(null);
   const [contactForm] = Form.useForm();
+  const [variableForm] = Form.useForm();
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [editingCell, setEditingCell] = useState<{ key: string; field: string } | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [numVariables, setNumVariables] = useState(10); // Default to 10 variables
 
   // Handle inline editing for any field
   const handleSaveField = (key: string, field: string, newValue: string) => {
@@ -43,18 +47,12 @@ export default function SelectAudience({
     const updatedRecipients = updatedContacts.map(contact => ({
       phone: contact.number,
       name: contact.name,
-      variables: {
-        var1: contact.var1 || '',
-        var2: contact.var2 || '',
-        var3: contact.var3 || '',
-        var4: contact.var4 || '',
-        var5: contact.var5 || '',
-        var6: contact.var6 || '',
-        var7: contact.var7 || '',
-        var8: contact.var8 || '',
-        var9: contact.var9 || '',
-        var10: contact.var10 || '',
-      }
+      variables: Object.fromEntries(
+        Array.from({ length: numVariables }, (_, i) => [
+          `var${i + 1}`,
+          contact[`var${i + 1}`] || ''
+        ])
+      )
     }));
     setRecipients(updatedRecipients);
     antMessage.success(`${field === 'name' ? 'Name' : field === 'number' ? 'Number' : field.toUpperCase()} updated successfully`);
@@ -95,7 +93,7 @@ export default function SelectAudience({
               onBlur={saveEdit}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
-                  saveEdit(); // Handle Enter key press
+                  saveEdit();
                 }
                 if (e.key === 'Escape') {
                   cancelEdit();
@@ -148,7 +146,7 @@ export default function SelectAudience({
       fixed: 'left' as const,
       ...createEditableCell('number', 'Enter phone number'),
     },
-    ...Array.from({ length: 10 }, (_, index) => ({
+    ...Array.from({ length: numVariables }, (_, index) => ({
       title: `Variable ${index + 1}`,
       dataIndex: `var${index + 1}`,
       key: `var${index + 1}`,
@@ -158,87 +156,114 @@ export default function SelectAudience({
     {
       title: 'Action',
       key: 'action',
-      width: 120,
+      width: 200,
       fixed: 'right' as const,
       render: (_: any, record: any) => (
-        <AntButton
-          type="link"
-          danger
-          icon={<DeleteOutlined />}
-          size="small"
-          style={{ color: '#ef4444' }}
-          onClick={() => {
-            setDeleteContactKey(record.key);
-            setIsDeleteDialogOpen(true);
-          }}
-        >
-          Delete
-        </AntButton>
+        <div className="flex gap-2">
+          <AntButton
+            type="link"
+            danger
+            icon={<DeleteOutlined />}
+            size="small"
+            style={{ color: '#ef4444' }}
+            onClick={() => {
+              setDeleteContactKey(record.key);
+              setIsDeleteDialogOpen(true);
+            }}
+          >
+            Delete
+          </AntButton>
+          <AntButton
+            type="link"
+            icon={<Settings />}
+            size="small"
+            style={{ color: '#3b82f6' }}
+            onClick={() => setIsVariableDialogOpen(true)}
+          >
+          
+          </AntButton>
+        </div>
       ),
     },
   ];
 
   // Handle downloading sample Excel file
   const handleDownloadSampleExcel = () => {
-    // Sample data with name, number (with country code), and var1 to var10
     const sampleData = [
       {
         name: 'John Doe',
         number: '+12025550123',
-        var1: 'John',
-        var2: '123.456.789-10',
-        var3: '2 BONECO',
-        var4: 'NB123456789012BR',
-        var5: '123 Main St, New York, NY 10001',
-        var6: '100.50',
-        var7: 'Group A',
-        var8: 'Active',
-        var9: '2025-01-01',
-        var10: 'VIP'
+        ...Object.fromEntries(
+          Array.from({ length: numVariables }, (_, i) => [
+            `var${i + 1}`,
+            `Sample${i + 1}`
+          ])
+        )
       },
       {
         name: 'Jane Smith',
         number: '+919876543210',
-        var1: 'Jane',
-        var2: '987.654.321-00',
-        var3: '3 BONECO',
-        var4: 'NB987654321098BR',
-        var5: '456 Elm St, Mumbai, MH 400001',
-        var6: '200.75',
-        var7: 'Group B',
-        var8: 'Inactive',
-        var9: '2025-02-01',
-        var10: 'Standard'
+        ...Object.fromEntries(
+          Array.from({ length: numVariables }, (_, i) => [
+            `var${i + 1}`,
+            `Sample${i + 1}`
+          ])
+        )
       }
     ];
 
-    // Create worksheet
     const worksheet = XLSX.utils.json_to_sheet(sampleData);
-    // Define column widths (in characters)
     worksheet['!cols'] = [
-      { wch: 20 }, // name
-      { wch: 15 }, // number
-      { wch: 15 }, // var1
-      { wch: 15 }, // var2
-      { wch: 10 }, // var3
-      { wch: 15 }, // var4
-      { wch: 30 }, // var5
-      { wch: 10 }, // var6
-      { wch: 10 }, // var7
-      { wch: 10 }, // var8
-      { wch: 15 }, // var9
-      { wch: 10 }  // var10
+      { wch: 20 },
+      { wch: 15 },
+      ...Array.from({ length: numVariables }, () => ({ wch: 15 })),
     ];
-    // Create workbook
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
-    // Generate Excel file and trigger download
     XLSX.writeFile(workbook, 'Sample_Contacts.xlsx');
     antMessage.success('Sample Excel file downloaded successfully');
+    setIsDownloadDialogOpen(false);
+  };
+
+  // Handle downloading sample CSV file
+  const handleDownloadSampleCSV = () => {
+    const headers = ['name', 'number', ...Array.from({ length: numVariables }, (_, i) => `var${i + 1}`)];
+    const sampleData = [
+      [
+        'John Doe',
+        '+12025550123',
+        ...Array.from({ length: numVariables }, (_, i) => `Sample${i + 1}`),
+      ],
+      [
+        'Jane Smith',
+        '+919876543210',
+        ...Array.from({ length: numVariables }, (_, i) => `Sample${i + 1}`),
+      ],
+    ];
+
+    // Create CSV content
+    const csvContent = [
+      headers.join(','),
+      ...sampleData.map(row => row.join(',')),
+    ].join('\n');
+
+    // Create a Blob and trigger download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'Sample_Contacts.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    antMessage.success('Sample CSV file downloaded successfully');
+    setIsDownloadDialogOpen(false);
   };
 
   const handleContactAdd = () => {
     contactForm.resetFields();
+    contactForm.setFieldsValue({ numVariables: numVariables });
     setIsContactDialogOpen(true);
   };
 
@@ -251,18 +276,12 @@ export default function SelectAudience({
       .map(contact => ({
         phone: contact.number,
         name: contact.name,
-        variables: {
-          var1: contact.var1,
-          var2: contact.var2,
-          var3: contact.var3,
-          var4: contact.var4,
-          var5: contact.var5,
-          var6: contact.var6,
-          var7: contact.var7,
-          var8: contact.var8,
-          var9: contact.var9,
-          var10: contact.var10,
-        }
+        variables: Object.fromEntries(
+          Array.from({ length: numVariables }, (_, i) => [
+            `var${i + 1}`,
+            contact[`var${i + 1}`] || ''
+          ])
+        )
       }));
     setRecipients(updatedRecipients);
   };
@@ -295,20 +314,14 @@ export default function SelectAudience({
       const updatedRecipients = updatedContacts.map(contact => ({
         phone: contact.number,
         name: contact.name,
-        variables: {
-          var1: contact.var1 || '',
-          var2: contact.var2 || '',
-          var3: contact.var3 || '',
-          var4: contact.var4 || '',
-          var5: contact.var5 || '',
-          var6: contact.var6 || '',
-          var7: contact.var7 || '',
-          var8: contact.var8 || '',
-          var9: contact.var9 || '',
-          var10: contact.var10 || '',
-        }
+        variables: Object.fromEntries(
+          Array.from({ length: numVariables }, (_, i) => [
+            `var${i + 1}`,
+            contact[`var${i + 1}`] || ''
+          ])
+        )
       }));
-      setRecipients(updatedRecipients);
+    setRecipients(updatedRecipients);
 
       setIsContactDialogOpen(false);
       contactForm.resetFields();
@@ -320,6 +333,28 @@ export default function SelectAudience({
   const handleContactCancel = () => {
     setIsContactDialogOpen(false);
     contactForm.resetFields();
+  };
+
+  const handleVariableSubmit = async () => {
+    try {
+      const values = await variableForm.validateFields();
+      const newNumVariables = parseInt(values.numVariables, 10);
+      if (newNumVariables < 1 || newNumVariables > 30) {
+        antMessage.error('Number of variables must be between 1 and 30');
+        return;
+      }
+      setNumVariables(newNumVariables);
+      antMessage.success(`Set to ${newNumVariables} variables`);
+      setIsVariableDialogOpen(false);
+      variableForm.resetFields();
+    } catch (error) {
+      console.error('Validation failed:', error);
+    }
+  };
+
+  const handleVariableCancel = () => {
+    setIsVariableDialogOpen(false);
+    variableForm.resetFields();
   };
 
   const handleRemoveDuplicates = () => {
@@ -340,18 +375,12 @@ export default function SelectAudience({
       const updatedRecipients = uniqueContacts.map(contact => ({
         phone: contact.number,
         name: contact.name,
-        variables: {
-          var1: contact.var1 || '',
-          var2: contact.var2 || '',
-          var3: contact.var3 || '',
-          var4: contact.var4 || '',
-          var5: contact.var5 || '',
-          var6: contact.var6 || '',
-          var7: contact.var7 || '',
-          var8: contact.var8 || '',
-          var9: contact.var9 || '',
-          var10: contact.var10 || '',
-        }
+        variables: Object.fromEntries(
+          Array.from({ length: numVariables }, (_, i) => [
+            `var${i + 1}`,
+            contact[`var${i + 1}`] || ''
+          ])
+        )
       }));
       setRecipients(updatedRecipients);
     }
@@ -364,7 +393,7 @@ export default function SelectAudience({
         cleanedCount++;
         return {
           ...contact,
-          number: contact.number.replace(/\s+/g, '') // Remove all spaces
+          number: contact.number.replace(/\s+/g, '')
         };
       }
       return contact;
@@ -379,18 +408,12 @@ export default function SelectAudience({
       const updatedRecipients = cleanedContacts.map(contact => ({
         phone: contact.number,
         name: contact.name,
-        variables: {
-          var1: contact.var1 || '',
-          var2: contact.var2 || '',
-          var3: contact.var3 || '',
-          var4: contact.var4 || '',
-          var5: contact.var5 || '',
-          var6: contact.var6 || '',
-          var7: contact.var7 || '',
-          var8: contact.var8 || '',
-          var9: contact.var9 || '',
-          var10: contact.var10 || '',
-        }
+        variables: Object.fromEntries(
+          Array.from({ length: numVariables }, (_, i) => [
+            `var${i + 1}`,
+            contact[`var${i + 1}`] || ''
+          ])
+        )
       }));
       setRecipients(updatedRecipients);
     }
@@ -401,7 +424,12 @@ export default function SelectAudience({
     setRecipients([{
       phone: '',
       name: '',
-      variables: { var1: '', var2: '', var3: '', var4: '', var5: '', var6: '', var7: '', var8: '', var9: '', var10: '' }
+      variables: Object.fromEntries(
+        Array.from({ length: numVariables }, (_, i) => [
+          `var${i + 1}`,
+          ''
+        ])
+      )
     }]);
     antMessage.success('All contacts deleted.');
   };
@@ -430,10 +458,9 @@ export default function SelectAudience({
       <div className="space-y-6">
         <div>
           <h3 className="text-lg font-semibold text-zinc-200 mb-2">Select Audience</h3>
-          <p className="text-zinc-400 mb-6">Import recipients from Excel, download a sample Excel file, or add manually. Click any cell to edit.</p>
+          <p className="text-zinc-400 mb-6">Import recipients from Excel, download a sample file, or add manually. Click any cell to edit.</p>
         </div>
 
-        {/* Instructions */}
         <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-4 mb-4">
           <div className="flex items-start gap-3">
             <FileText className="h-5 w-5 text-blue-400 mt-0.5 flex-shrink-0" />
@@ -441,13 +468,12 @@ export default function SelectAudience({
               <h4 className="text-blue-400 font-medium mb-1">Editing Instructions</h4>
               <ul className="text-blue-300 text-sm space-y-1">
                 <li>• Click any cell (Name, Number, or Variables) to edit</li>
-                <li>• Download the sample Excel file for the correct import format</li>
+                <li>• Download the sample file for the correct import format</li>
               </ul>
             </div>
           </div>
         </div>
 
-        {/* Import Options */}
         <div className="flex flex-wrap gap-3 mb-6">
           <Button
             variant="outline"
@@ -459,11 +485,11 @@ export default function SelectAudience({
           </Button>
           <Button
             variant="outline"
-            onClick={handleDownloadSampleExcel}
+            onClick={() => setIsDownloadDialogOpen(true)}
             className="bg-zinc-800 hover:bg-zinc-700 text-white border-zinc-700"
           >
             <Download className="h-4 w-4 mr-2" />
-            Download Sample Excel
+            Download Sample File
           </Button>
           <Button
             variant="outline"
@@ -499,7 +525,6 @@ export default function SelectAudience({
           </Button>
         </div>
 
-        {/* Ant Design Table with Fixed Width Container */}
         <div className="bg-zinc-900 rounded-lg p-4 table-container">
           <AntTable
             columns={antdColumns}
@@ -525,7 +550,6 @@ export default function SelectAudience({
           />
         </div>
 
-        {/* Summary */}
         <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4">
           <div className="flex items-center justify-between text-sm">
             <span className="text-zinc-400">Total: {antdContacts.length}</span>
@@ -534,7 +558,6 @@ export default function SelectAudience({
           </div>
         </div>
 
-        {/* Contact Dialog for Adding New Contact */}
         <Dialog open={isContactDialogOpen} onOpenChange={setIsContactDialogOpen}>
           <DialogContent className="bg-zinc-800 text-zinc-200 border-zinc-700 max-w-2xl max-h-[80vh] overflow-y-auto">
             <DialogHeader>
@@ -570,10 +593,35 @@ export default function SelectAudience({
                 </Form.Item>
               </div>
 
+              <Form.Item
+                label={<span className="text-zinc-400">Number of Variables</span>}
+                name="numVariables"
+                initialValue={numVariables}
+                rules={[
+                  { required: true, message: 'Please enter number of variables' },
+                  {
+                    validator: (_, value) => {
+                      const num = parseInt(value, 10);
+                      if (isNaN(num) || num < 1 || num > 30) {
+                        return Promise.reject('Number of variables must be between 1 and 30');
+                      }
+                      return Promise.resolve();
+                    }
+                  }
+                ]}
+              >
+                <Input
+                  type="number"
+                  placeholder="Enter number of variables (1-30)"
+                  className="bg-zinc-900 border-zinc-700 text-zinc-200 focus:border-blue-500"
+                  onChange={(e) => setNumVariables(parseInt(e.target.value) || 10)}
+                />
+              </Form.Item>
+
               <div className="border-t border-zinc-700 pt-4 mt-4">
                 <h4 className="text-zinc-200 mb-4">Custom Variables</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {Array.from({ length: 10 }, (_, index) => (
+                  {Array.from({ length: numVariables }, (_, index) => (
                     <Form.Item
                       key={index}
                       label={<span className="text-zinc-400">Variable {index + 1}</span>}
@@ -606,7 +654,6 @@ export default function SelectAudience({
           </DialogContent>
         </Dialog>
 
-        {/* Delete Confirmation Dialog */}
         <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
           <DialogContent className="bg-zinc-800 text-zinc-200 border-zinc-700">
             <DialogHeader>
@@ -631,7 +678,82 @@ export default function SelectAudience({
           </DialogContent>
         </Dialog>
 
-        {/* Excel Import Modal */}
+        <Dialog open={isVariableDialogOpen} onOpenChange={setIsVariableDialogOpen}>
+          <DialogContent className="bg-zinc-800 text-zinc-200 border-zinc-700 max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-zinc-200">Set Number of Variables</DialogTitle>
+            </DialogHeader>
+            <Form
+              form={variableForm}
+              layout="vertical"
+              requiredMark={false}
+              className="space-y-4"
+            >
+              <Form.Item
+                label={<span className="text-zinc-400">Number of Variables (1-30)</span>}
+                name="numVariables"
+                initialValue={numVariables}
+                rules={[
+                  { required: true, message: 'Please enter number of variables' },
+                  {
+                    validator: (_, value) => {
+                      const num = parseInt(value, 10);
+                      if (isNaN(num) || num < 1 || num > 30) {
+                        return Promise.reject('Number of variables must be between 1 and 30');
+                      }
+                      return Promise.resolve();
+                    }
+                  }
+                ]}
+              >
+                <Input
+                  type="number"
+                  placeholder="Enter number of variables (1-30)"
+                  className="bg-zinc-900 border-zinc-700 text-zinc-200 focus:border-blue-500"
+                />
+              </Form.Item>
+            </Form>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={handleVariableCancel}
+                className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleVariableSubmit}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                Set
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={isDownloadDialogOpen} onOpenChange={setIsDownloadDialogOpen}>
+          <DialogContent className="bg-zinc-800 text-zinc-200 border-zinc-700 max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-zinc-200">Download Sample File</DialogTitle>
+            </DialogHeader>
+            <p className="text-center text-zinc-400">What type of sample file would you like to download?</p>
+            <DialogFooter className="flex justify-center gap-3">
+              <Button
+                onClick={handleDownloadSampleExcel}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                Excel (XLSX)
+              </Button>
+              <Button
+                onClick={handleDownloadSampleCSV}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                CSV
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         <ExcelImportModal
           open={importModalOpen}
           onOpenChange={setImportModalOpen}
@@ -639,6 +761,8 @@ export default function SelectAudience({
           setAntdContacts={setAntdContacts}
           setRecipients={setRecipients}
           showToast={showToast}
+          onDownloadSampleExcel={handleDownloadSampleExcel}
+          onDownloadSampleCSV={handleDownloadSampleCSV}
         />
       </div>
 
@@ -707,7 +831,6 @@ export default function SelectAudience({
           background: #555;
         }
 
-        /* Custom scrollbar for dialog */
         .overflow-y-auto::-webkit-scrollbar {
           width: 8px;
         }

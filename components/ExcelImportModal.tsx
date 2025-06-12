@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from 'react';
@@ -7,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Upload, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Upload, ChevronLeft, ChevronRight, Zap } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { message as antMessage } from 'antd';
 
@@ -130,6 +129,112 @@ export default function ExcelImportModal({
 
   const handleColumnMappingChange = (field: string, header: string) => {
     setColumnMappings(prev => ({ ...prev, [field]: header === 'none' ? '' : header }));
+  };
+
+  // Auto mapping function
+  const handleAutoMap = () => {
+    const newMappings = { ...columnMappings };
+    
+    // Common patterns for name fields
+    const namePatterns = [
+      /^name$/i,
+      /^full.?name$/i,
+      /^customer.?name$/i,
+      /^contact.?name$/i,
+      /^person.?name$/i,
+      /^user.?name$/i,
+      /^client.?name$/i,
+      /^first.?name$/i,
+      /^naam$/i,
+      /^नाम$/i
+    ];
+
+    // Common patterns for phone fields
+    const phonePatterns = [
+      /^phone$/i,
+      /^mobile$/i,
+      /^number$/i,
+      /^phone.?number$/i,
+      /^mobile.?number$/i,
+      /^contact.?number$/i,
+      /^whatsapp$/i,
+      /^whatsapp.?number$/i,
+      /^cell$/i,
+      /^telephone$/i,
+      /^tel$/i,
+      /^mob$/i,
+      /^फोन$/i,
+      /^मोबाइल$/i
+    ];
+
+    // Auto-map name field
+    for (const header of excelHeaders) {
+      if (namePatterns.some(pattern => pattern.test(header))) {
+        newMappings.name = header;
+        break;
+      }
+    }
+
+    // Auto-map phone field
+    for (const header of excelHeaders) {
+      if (phonePatterns.some(pattern => pattern.test(header))) {
+        newMappings.phone = header;
+        break;
+      }
+    }
+
+    // Auto-map variable fields based on common patterns
+    const variablePatterns = [
+      /^var\d+$/i,
+      /^variable\d+$/i,
+      /^field\d+$/i,
+      /^custom\d+$/i,
+      /^data\d+$/i,
+      /^value\d+$/i,
+      /^param\d+$/i,
+      /^attr\d+$/i,
+      /^property\d+$/i,
+      /^extra\d+$/i
+    ];
+
+    // Get remaining headers (not used for name/phone)
+    const remainingHeaders = excelHeaders.filter(header => 
+      header !== newMappings.name && header !== newMappings.phone
+    );
+
+    // Map variables in order
+    let varIndex = 1;
+    for (const header of remainingHeaders) {
+      if (varIndex > 30) break; // Max 30 variables
+      
+      const varKey = `var${varIndex}`;
+      if (varKey in newMappings) {
+        // Check if it matches variable patterns or just assign in order
+        const isVariablePattern = variablePatterns.some(pattern => pattern.test(header));
+        if (isVariablePattern || !newMappings[varKey]) {
+          newMappings[varKey] = header;
+          varIndex++;
+        }
+      }
+    }
+
+    // If no specific variable patterns found, just map remaining headers in order
+    if (varIndex === 1) {
+      for (const header of remainingHeaders) {
+        if (varIndex > 30) break;
+        const varKey = `var${varIndex}`;
+        if (varKey in newMappings && !newMappings[varKey]) {
+          newMappings[varKey] = header;
+          varIndex++;
+        }
+      }
+    }
+
+    setColumnMappings(newMappings);
+    
+    // Show success message with mapping summary
+    const mappedCount = Object.values(newMappings).filter(value => value !== '').length;
+    showToast(`Auto-mapped ${mappedCount} columns successfully!`, 'success');
   };
 
   const handleImportRecipients = () => {
@@ -281,7 +386,18 @@ export default function ExcelImportModal({
             </div>
           ) : (
             <div className="space-y-4">
-              <Label className="text-zinc-400 font-medium">Map Columns</Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-zinc-400 font-medium">Map Columns</Label>
+                <Button
+                  type="button"
+                  onClick={handleAutoMap}
+                  className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700 flex items-center gap-2"
+                >
+                  <Zap className="h-4 w-4" />
+                  Auto Map
+                </Button>
+              </div>
+              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {paginatedFields.map(field => (
                   <div key={field} className="space-y-2">

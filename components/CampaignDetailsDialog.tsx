@@ -47,7 +47,7 @@ export default function CampaignDetailsDialog({
   const [isStopped, setIsStopped] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<string>('all'); // 'all', 'sent', 'failed', 'not_exist'
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   const [instances, setInstances] = useState<any[]>([]);
   const [selectedInstances, setSelectedInstances] = useState<string[]>([]);
   const [instancesDisconnected, setInstancesDisconnected] = useState(false);
@@ -66,7 +66,6 @@ export default function CampaignDetailsDialog({
   const lastInstanceStatusRef = useRef<{ [key: string]: string }>({});
   const campaignStarted = useRef(false);
 
-  // SSR-safe token getter
   const getToken = useCallback((): string | null => {
     if (typeof window === 'undefined') return null;
     
@@ -84,7 +83,6 @@ export default function CampaignDetailsDialog({
     onError: (error) => console.error('Socket error:', error),
   });
 
-  // Fetch instances data and update instance status immediately
   const fetchInstances = useCallback(async () => {
     const authToken = getToken();
     if (!authToken) return;
@@ -106,7 +104,6 @@ export default function CampaignDetailsDialog({
         const fetchedInstances = data.instances || [];
         setInstances(fetchedInstances);
         
-        // IMMEDIATE instance status check after fetching
         if (selectedInstances.length > 0) {
           checkInstanceConnectionsImmediate(fetchedInstances);
         }
@@ -116,13 +113,11 @@ export default function CampaignDetailsDialog({
     }
   }, [getToken, selectedInstances]);
 
-  // IMMEDIATE instance connection check without delays
   const checkInstanceConnectionsImmediate = useCallback((instancesData?: any[]) => {
     const instancesToCheck = instancesData || instances;
     
     if (!campaignStarted.current || !selectedInstances.length) return;
 
-    // Get current status of all selected instances
     const currentInstanceStatuses: { [key: string]: string } = {};
     selectedInstances.forEach(instanceId => {
       const instance = instancesToCheck.find(inst => inst._id === instanceId);
@@ -144,11 +139,9 @@ export default function CampaignDetailsDialog({
       currentStatuses: currentInstanceStatuses
     });
 
-    // INSTANT AUTO-PAUSE: If all selected instances are disconnected during active campaign
     if (connectedInstances.length === 0 && (isProcessing || campaignData?.status === 'processing')) {
       console.log('🚨 ALL INSTANCES DISCONNECTED - INSTANT AUTO-PAUSE');
       
-      // IMMEDIATE UI UPDATE - No delays, no waiting
       setInstancesDisconnected(true);
       setDisconnectionReason(`All ${disconnectedInstances.length} selected instance(s) disconnected`);
       setIsProcessing(false);
@@ -156,13 +149,11 @@ export default function CampaignDetailsDialog({
       setIsStopped(false);
       setCanResumeAfterReconnect(false);
       
-      // Update campaign progress to show disconnection IMMEDIATELY
       setCampaignData(prev => prev ? ({
         ...prev,
         status: 'paused'
       }) : null);
 
-      // Send pause signal to backend (fire and forget - don't wait)
       if (campaignData?._id) {
         const authToken = getToken();
         if (authToken) {
@@ -181,23 +172,17 @@ export default function CampaignDetailsDialog({
           });
         }
       }
-    } 
-    // If instances reconnect while campaign is paused due to disconnection
-    else if (connectedInstances.length > 0 && instancesDisconnected && isPaused) {
+    } else if (connectedInstances.length > 0 && instancesDisconnected && isPaused) {
       console.log('✅ Instances reconnected, ready to resume');
       
       setInstancesDisconnected(false);
       setCanResumeAfterReconnect(true);
       setDisconnectionReason('');
-    }
-    // If some instances are disconnected but not all
-    else if (disconnectedInstances.length > 0 && connectedInstances.length > 0) {
+    } else if (disconnectedInstances.length > 0 && connectedInstances.length > 0) {
       console.log('⚠️ Some instances disconnected');
       setInstancesDisconnected(false);
       setDisconnectionReason(`${disconnectedInstances.length} of ${selectedInstances.length} instances disconnected`);
-    }
-    // All instances connected
-    else if (connectedInstances.length === selectedInstances.length && selectedInstances.length > 0) {
+    } else if (connectedInstances.length === selectedInstances.length && selectedInstances.length > 0) {
       console.log('✅ All instances connected');
       setInstancesDisconnected(false);
       setDisconnectionReason('');
@@ -206,19 +191,15 @@ export default function CampaignDetailsDialog({
       }
     }
 
-    // Update the reference for next check
     lastInstanceStatusRef.current = currentInstanceStatuses;
   }, [campaignStarted.current, selectedInstances, instances, isProcessing, isPaused, instancesDisconnected, campaignData, getToken]);
 
-  // ULTRA-FAST instance monitoring with INSTANT disconnect detection
   const checkInstanceConnections = useCallback(() => {
     checkInstanceConnectionsImmediate();
   }, [checkInstanceConnectionsImmediate]);
 
-  // Initialize instance status tracking when campaign starts
   useEffect(() => {
     if (campaignData && selectedInstances.length > 0) {
-      // Initialize the reference with current statuses
       const initialStatuses: { [key: string]: string } = {};
       selectedInstances.forEach(instanceId => {
         const instance = instances.find(inst => inst._id === instanceId);
@@ -226,22 +207,17 @@ export default function CampaignDetailsDialog({
       });
       lastInstanceStatusRef.current = initialStatuses;
       
-      // Immediate check when dialog opens
       checkInstanceConnectionsImmediate();
     }
   }, [campaignData, selectedInstances, instances, checkInstanceConnectionsImmediate]);
 
-  // Start ULTRA-AGGRESSIVE instance monitoring when campaign is processing OR when dialog is open
   useEffect(() => {
     if (open && selectedInstances.length > 0) {
-      // Check immediately when dialog opens
       checkInstanceConnections();
       
-      // Set up ULTRA-FREQUENT interval for INSTANT detection (every 500ms)
       instanceCheckIntervalRef.current = setInterval(() => {
-        // Fetch fresh instance data and check immediately
         fetchInstances();
-      }, 1000); // Check every 1 second for real-time updates
+      }, 1000);
       
       return () => {
         if (instanceCheckIntervalRef.current) {
@@ -250,52 +226,55 @@ export default function CampaignDetailsDialog({
         }
       };
     } else if (instanceCheckIntervalRef.current) {
-      // Clear interval when dialog is closed
       clearInterval(instanceCheckIntervalRef.current);
       instanceCheckIntervalRef.current = null;
     }
   }, [open, selectedInstances, checkInstanceConnections, fetchInstances]);
 
-  // Function to update recipient statuses based on campaign statistics
   const updateRecipientStatuses = useCallback((campaign: Campaign) => {
     if (!campaign.recipients) return [];
-
+  
     const statuses = new Array(campaign.recipients.length).fill('pending');
     const sentCount = campaign.statistics?.sent || campaign.sentMessages || 0;
     const failedCount = campaign.statistics?.failed || campaign.failedMessages || 0;
     const notExistCount = campaign.statistics?.notExist || campaign.notExistMessages || 0;
-
-    // Assign statuses based on the campaign's statistics
+  
     let index = 0;
-
-    // Sent messages
+  
     for (let i = 0; i < sentCount && index < statuses.length; i++, index++) {
       statuses[index] = 'sent';
     }
-
-    // Failed messages
+  
     for (let i = 0; i < failedCount && index < statuses.length; i++, index++) {
       statuses[index] = 'failed';
     }
-
-    // Not on WhatsApp (not_exist) messages
+  
     for (let i = 0; i < notExistCount && index < statuses.length; i++, index++) {
       statuses[index] = 'not_exist';
     }
-
-    // Override with individual recipient status if available
+  
+    // Set all remaining pending statuses to "stopped" if campaign is stopped
+    if (campaign.status === 'stopped') {
+      for (let i = 0; i < statuses.length; i++) {
+        if (statuses[i] === 'pending') {
+          statuses[i] = 'stopped';
+        }
+      }
+    }
+  
+    // Override with individual recipient status from backend, but only for non-pending statuses
     campaign.recipients.forEach((recipient: any, idx: number) => {
-      if (recipient.status) {
+      if (recipient.status && recipient.status !== 'pending' && statuses[idx] !== 'stopped') {
         statuses[idx] = recipient.status === 'not_exist' ? 'not_exist' : recipient.status;
       }
     });
-
+  
     return statuses;
   }, []);
 
   const loadCampaignDetails = useCallback(async (campaignId: string, forceRefresh = false) => {
     if (!token || (hasLoadedDetailsRef.current && !forceRefresh)) return;
-
+  
     setIsLoadingDetails(true);
     try {
       const response = await fetch(`https://whatsapp.recuperafly.com/api/template/message/get`, {
@@ -306,15 +285,14 @@ export default function CampaignDetailsDialog({
         },
         body: JSON.stringify({ id: campaignId }),
       });
-
+  
       if (response.ok) {
         const data = await response.json();
         console.log('Detailed campaign data:', data);
-
+  
         if (data.status && data.message) {
           const detailedCampaign = data.message;
-
-          // Update campaign data
+  
           setCampaignData((prev) => ({
             ...prev,
             ...detailedCampaign,
@@ -323,21 +301,18 @@ export default function CampaignDetailsDialog({
             failedMessages: detailedCampaign.statistics?.failed || 0,
             notExistMessages: detailedCampaign.statistics?.notExist || 0,
           }));
-
-          // Set selected instances from campaign data
+  
           if (detailedCampaign.instanceIds) {
             setSelectedInstances(detailedCampaign.instanceIds);
           }
-
-          // Update recipient statuses based on detailed campaign data
+  
           const statuses = updateRecipientStatuses(detailedCampaign);
           setRecipientStatuses(statuses);
-
+  
           setIsPaused(detailedCampaign.status === 'paused');
           setIsStopped(detailedCampaign.status === 'stopped');
           setIsProcessing(detailedCampaign.status === 'processing');
           
-          // Set campaign started flag for processing/paused campaigns
           if (detailedCampaign.status === 'processing' || detailedCampaign.status === 'paused') {
             campaignStarted.current = true;
           }
@@ -345,8 +320,7 @@ export default function CampaignDetailsDialog({
           if (!hasLoadedDetailsRef.current) {
             hasLoadedDetailsRef.current = true;
           }
-
-          // Only schedule auto-refresh if campaign just completed and we haven't done it before
+  
           if ((detailedCampaign.status === 'completed' || detailedCampaign.status === 'stopped') && !hasCompletedRef.current && !autoRefreshTimeoutRef.current) {
             hasCompletedRef.current = true;
             autoRefreshTimeoutRef.current = setTimeout(() => {
@@ -374,7 +348,6 @@ export default function CampaignDetailsDialog({
       setIsProcessing(campaign.status === 'processing');
       hasCompletedRef.current = campaign.status === 'completed' || campaign.status === 'stopped';
       
-      // Set campaign started flag for processing/paused campaigns
       if (campaign.status === 'processing' || campaign.status === 'paused') {
         campaignStarted.current = true;
       }
@@ -384,7 +357,6 @@ export default function CampaignDetailsDialog({
     }
   }, [campaign, open, loadCampaignDetails, fetchInstances]);
 
-  // Optimized progress handler with throttling for large numbers
   const handleCampaignProgress = useCallback(
     (data: any) => {
       if (!campaignData || data.campaignId !== campaignData._id) return;
@@ -395,7 +367,6 @@ export default function CampaignDetailsDialog({
 
       console.log('Campaign progress update:', data);
 
-      // Handle disconnection status from backend
       if (data.instancesDisconnected !== undefined) {
         setInstancesDisconnected(data.instancesDisconnected);
         if (data.instancesDisconnected) {
@@ -440,11 +411,9 @@ export default function CampaignDetailsDialog({
         setInstancesDisconnected(false);
         setCanResumeAfterReconnect(false);
         campaignStarted.current = false;
-        // Reset control flags when campaign completes
         isStoppingRef.current = false;
         isPausingRef.current = false;
         isResumingRef.current = false;
-        // Only auto-refresh if we haven't completed before
         if (!hasCompletedRef.current) {
           hasCompletedRef.current = true;
           setTimeout(() => {
@@ -458,16 +427,18 @@ export default function CampaignDetailsDialog({
         setInstancesDisconnected(false);
         setCanResumeAfterReconnect(false);
         campaignStarted.current = false;
-        // Reset control flags when campaign stops
         isStoppingRef.current = false;
         isPausingRef.current = false;
         isResumingRef.current = false;
+        setRecipientStatuses((prev) => {
+          const newStatuses = [...prev];
+          return newStatuses.map((status) => (status === 'pending' ? 'stopped' : status));
+        });
       } else if (data.status === 'processing') {
         setIsProcessing(true);
         setIsPaused(false);
         setIsStopped(false);
         campaignStarted.current = true;
-        // Reset control flags when campaign is processing
         isStoppingRef.current = false;
         isPausingRef.current = false;
         isResumingRef.current = false;
@@ -475,7 +446,6 @@ export default function CampaignDetailsDialog({
         setIsProcessing(false);
         setIsPaused(true);
         setIsStopped(false);
-        // Reset control flags when campaign is paused
         isStoppingRef.current = false;
         isPausingRef.current = false;
         isResumingRef.current = false;
@@ -508,31 +478,26 @@ export default function CampaignDetailsDialog({
       setInstancesDisconnected(false);
       setCanResumeAfterReconnect(false);
       campaignStarted.current = false;
-      // Reset control flags when campaign completes
       isStoppingRef.current = false;
       isPausingRef.current = false;
       isResumingRef.current = false;
 
-      // Update statuses on campaign completion and force refresh only once
       setRecipientStatuses((prev) => {
         const newStatuses = [...prev];
         const sentCount = data.sent || 0;
-        const failedCount = data.failed || 0;
+        const failedCount = data.failed || 0.
         const notExistCount = data.notExist || 0;
 
         let index = 0;
 
-        // Sent messages
         for (let i = 0; i < sentCount && index < newStatuses.length; i++, index++) {
           newStatuses[index] = 'sent';
         }
 
-        // Failed messages
         for (let i = 0; i < failedCount && index < newStatuses.length; i++, index++) {
           newStatuses[index] = 'failed';
         }
 
-        // Not on WhatsApp (not_exist) messages
         for (let i = 0; i < notExistCount && index < newStatuses.length; i++, index++) {
           newStatuses[index] = 'not_exist';
         }
@@ -540,7 +505,6 @@ export default function CampaignDetailsDialog({
         return newStatuses;
       });
 
-      // Force refresh campaign details after completion only if not done before
       if (!hasCompletedRef.current) {
         hasCompletedRef.current = true;
         setTimeout(() => {
@@ -553,27 +517,44 @@ export default function CampaignDetailsDialog({
   );
 
   const handleCampaignStopped = useCallback(
-    (data: any) => {
-      if (!campaignData || data.campaignId !== campaignData._id) return;
-
-      console.log('Campaign stopped:', data);
-
-      setIsStopped(true);
-      setIsProcessing(false);
-      setIsPaused(false);
-      setInstancesDisconnected(false);
-      setCanResumeAfterReconnect(false);
-      campaignStarted.current = false;
-      // Reset control flags when campaign stops
-      isStoppingRef.current = false;
-      isPausingRef.current = false;
-      isResumingRef.current = false;
-
-      setCampaignData((prev) => (prev ? { ...prev, status: 'stopped' } : null));
-    },
-    [campaignData]
-  );
-
+  (data: any) => {
+    if (!campaignData || data.campaignId !== campaignData._id) return;
+    console.log('Campaign stopped:', data);
+    setIsStopped(true);
+    setIsProcessing(false);
+    setIsPaused(false);
+    setInstancesDisconnected(false);
+    setCanResumeAfterReconnect(false);
+    campaignStarted.current = false;
+    isStoppingRef.current = false;
+    isPausingRef.current = false;
+    isResumingRef.current = false;
+    setCampaignData((prev) =>
+      prev
+        ? {
+            ...prev,
+            status: 'stopped',
+            sentMessages: data.sent || prev.sentMessages,
+            failedMessages: data.failed || prev.failedMessages,
+            notExistMessages: data.notExist || prev.notExistMessages,
+          }
+        : null
+    );
+    setRecipientStatuses((prev) => {
+      const newStatuses = [...prev];
+      return newStatuses.map((status) => (status === 'pending' ? 'stopped' : status));
+    });
+    if (!hasCompletedRef.current) {
+      hasCompletedRef.current = true;
+      setTimeout(() => {
+        console.log('Final refresh after campaign stopped');
+        loadCampaignDetails(data.campaignId, true);
+      }, 1500);
+    }
+  },
+  [campaignData, loadCampaignDetails]
+);
+  
   const handleCampaignPaused = useCallback(
     (data: any) => {
       if (!campaignData || data.campaignId !== campaignData._id) return;
@@ -583,12 +564,10 @@ export default function CampaignDetailsDialog({
       setIsPaused(true);
       setIsProcessing(false);
       setIsStopped(false);
-      // Reset control flags when campaign is paused
       isStoppingRef.current = false;
       isPausingRef.current = false;
       isResumingRef.current = false;
 
-      // Handle disconnection-related pause
       if (data.instancesDisconnected) {
         setInstancesDisconnected(true);
         setDisconnectionReason('Campaign paused due to instance disconnection');
@@ -613,7 +592,6 @@ export default function CampaignDetailsDialog({
       setCanResumeAfterReconnect(false);
       setDisconnectionReason('');
       campaignStarted.current = true;
-      // Reset control flags when campaign is resumed
       isStoppingRef.current = false;
       isPausingRef.current = false;
       isResumingRef.current = false;
@@ -623,7 +601,6 @@ export default function CampaignDetailsDialog({
     [campaignData]
   );
 
-  // Setup socket listeners only once and cleanup properly
   useEffect(() => {
     if (!isConnected || !campaignData || socketListenersSetupRef.current) return;
 
@@ -666,12 +643,10 @@ export default function CampaignDetailsDialog({
     async (action: 'stop' | 'pause' | 'resume') => {
       if (!campaignData) return;
 
-      // Prevent multiple simultaneous control actions
       if (action === 'stop' && isStoppingRef.current) return;
       if (action === 'pause' && isPausingRef.current) return;
       if (action === 'resume' && isResumingRef.current) return;
 
-      // For resume, check if instances are connected
       if (action === 'resume' && instancesDisconnected) {
         const connectedInstances = instances.filter(instance => 
           selectedInstances.includes(instance._id) && instance.whatsapp?.status === 'connected'
@@ -683,7 +658,6 @@ export default function CampaignDetailsDialog({
         }
       }
 
-      // Set control flags
       if (action === 'stop') {
         isStoppingRef.current = true;
       } else if (action === 'pause') {
@@ -692,12 +666,15 @@ export default function CampaignDetailsDialog({
         isResumingRef.current = true;
       }
 
-      // INSTANT UI UPDATE - No waiting for server response
       if (action === 'stop') {
         setIsProcessing(false);
         setIsPaused(false);
         setIsStopped(true);
         setCampaignData((prev) => (prev ? { ...prev, status: 'stopped' } : null));
+        setRecipientStatuses((prev) => {
+          const newStatuses = [...prev];
+          return newStatuses.map((status) => (status === 'pending' ? 'stopped' : status));
+        });
       } else if (action === 'pause') {
         setIsProcessing(false);
         setIsPaused(true);
@@ -737,10 +714,8 @@ export default function CampaignDetailsDialog({
 
         if (result.status) {
           console.log(`Campaign ${action} signal sent successfully`);
-          // Don't reset flags here - let socket events handle it
         } else {
           console.error(`Campaign ${action} failed:`, result.message);
-          // Revert UI state and reset flags on failure
           if (action === 'stop') {
             setIsProcessing(true);
             setIsPaused(false);
@@ -764,7 +739,6 @@ export default function CampaignDetailsDialog({
         }
       } catch (error) {
         console.error(`Error ${action}ing campaign:`, error);
-        // Revert UI state and reset flags on error
         if (action === 'stop') {
           setIsProcessing(true);
           setIsPaused(false);
@@ -794,7 +768,6 @@ export default function CampaignDetailsDialog({
   const handlePauseCampaign = useCallback(() => handleCampaignControl('pause'), [handleCampaignControl]);
   const handleResumeCampaign = useCallback(() => handleCampaignControl('resume'), [handleCampaignControl]);
 
-  // Reset all state when dialog closes
   useEffect(() => {
     if (!open) {
       hasLoadedDetailsRef.current = false;
@@ -814,18 +787,15 @@ export default function CampaignDetailsDialog({
       setCanResumeAfterReconnect(false);
       setSelectedInstances([]);
       
-      // Reset control flags when dialog closes
       isStoppingRef.current = false;
       isPausingRef.current = false;
       isResumingRef.current = false;
       
-      // Clear auto-refresh timeout when dialog closes
       if (autoRefreshTimeoutRef.current) {
         clearTimeout(autoRefreshTimeoutRef.current);
         autoRefreshTimeoutRef.current = null;
       }
 
-      // Clear instance check interval when dialog closes
       if (instanceCheckIntervalRef.current) {
         clearInterval(instanceCheckIntervalRef.current);
         instanceCheckIntervalRef.current = null;
@@ -833,7 +803,6 @@ export default function CampaignDetailsDialog({
     }
   }, [open]);
 
-  // Cleanup timeout and interval on unmount
   useEffect(() => {
     return () => {
       if (autoRefreshTimeoutRef.current) {
@@ -847,7 +816,6 @@ export default function CampaignDetailsDialog({
 
   if (!campaignData) return null;
 
-  // Filter recipients based on status
   const filteredRecipients = campaignData.recipients?.filter((recipient, index) => {
     if (statusFilter === 'all') return true;
     const status = recipientStatuses[index] || 'pending';
@@ -937,54 +905,41 @@ export default function CampaignDetailsDialog({
     }
   };
 
-  // Get counts for each status
   const sentCount = recipientStatuses.filter(status => status === 'sent').length;
   const failedCount = recipientStatuses.filter(status => status === 'failed').length;
   const notExistCount = recipientStatuses.filter(status => status === 'not_exist').length;
 
-  // Get connected instances count
   const getConnectedInstancesCount = () => {
     return instances.filter(instance => 
       selectedInstances.includes(instance._id) && instance.whatsapp?.status === 'connected'
     ).length;
   };
 
-  // Determine if resume button should be enabled - DISABLED if all instances disconnected
   const canResume = isPaused && !instancesDisconnected && getConnectedInstancesCount() > 0;
 
-  // Determine connection status message
-  const getConnectionStatusMessage = () => {
-    const connectedCount = getConnectedInstancesCount();
-    const totalCount = selectedInstances.length;
-    
-    if (connectedCount === 0 && totalCount > 0) {
-      return {
+  const connectionStatus = getConnectedInstancesCount() === 0 && selectedInstances.length > 0
+    ? {
         isConnected: false,
         message: '🚨 All Instances Disconnected - Campaign Auto-Paused',
-        subMessage: `0 of ${totalCount} instances connected`
-      };
-    } else if (connectedCount < totalCount && totalCount > 0) {
-      return {
-        isConnected: false,
-        message: '⚠️ Some Instances Disconnected',
-        subMessage: `${connectedCount} of ${totalCount} instances connected`
-      };
-    } else if (connectedCount === totalCount && totalCount > 0) {
-      return {
-        isConnected: true,
-        message: '✅ All Instances Connected',
-        subMessage: `${connectedCount} of ${totalCount} instances connected`
-      };
-    } else {
-      return {
-        isConnected: false,
-        message: '❓ No Instances Selected',
-        subMessage: 'No instances to monitor'
-      };
-    }
-  };
-
-  const connectionStatus = getConnectionStatusMessage();
+        subMessage: `0 of ${selectedInstances.length} instances connected`
+      }
+    : getConnectedInstancesCount() < selectedInstances.length && selectedInstances.length > 0
+      ? {
+          isConnected: false,
+          message: '⚠️ Some Instances Disconnected',
+          subMessage: `${getConnectedInstancesCount()} of ${selectedInstances.length} instances connected`
+        }
+      : selectedInstances.length > 0
+        ? {
+            isConnected: true,
+            message: '✅ All Instances Connected',
+            subMessage: `${getConnectedInstancesCount()} of ${selectedInstances.length} instances connected`
+          }
+        : {
+            isConnected: false,
+            message: '❓ No Instances Selected',
+            subMessage: 'No instances to monitor'
+          };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1074,7 +1029,6 @@ export default function CampaignDetailsDialog({
         </DialogHeader>
 
         <div className="space-y-6 p-6">
-          {/* Instance Connection Status - Enhanced with instant feedback */}
           {campaignStarted.current && selectedInstances.length > 0 && (
             <div className={`p-4 rounded-lg border ${connectionStatus.isConnected ? 'bg-green-500/10 border-green-500/20' : 'bg-red-500/10 border-red-500/20'}`}>
               <div className="flex items-center gap-3">
@@ -1096,7 +1050,6 @@ export default function CampaignDetailsDialog({
             </div>
           )}
 
-          {/* Campaign Status Display */}
           {isStopped && (
             <div className="p-4 rounded-lg border bg-red-500/10 border-red-500/20">
               <div className="flex items-center gap-3">
@@ -1151,8 +1104,6 @@ export default function CampaignDetailsDialog({
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-semibold text-zinc-200">Recipients ({campaignData.recipients?.length || 0})</h3>
-                  
-                  {/* Status Filter Buttons */}
                   <div className="flex gap-2">
                     <Button
                       onClick={() => {

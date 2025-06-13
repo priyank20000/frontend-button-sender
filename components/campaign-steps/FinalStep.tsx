@@ -362,7 +362,7 @@ export default function FinalStep({
       instancesDisconnected: false
     }));
   }, [currentCampaignId]);
-
+  
   const handleCampaignStopped = useCallback((data: any) => {
     if (data.campaignId !== currentCampaignId) return;
     
@@ -380,6 +380,12 @@ export default function FinalStep({
       status: 'stopped',
       instancesDisconnected: false
     }));
+  
+    // Update recipient statuses: set "stopped" for all pending recipients
+    setRecipientStatuses(prev => {
+      const newStatuses = [...prev];
+      return newStatuses.map(status => (status === 'pending' ? 'stopped' : status));
+    });
   }, [currentCampaignId]);
 
   const handleCampaignPaused = useCallback((data: any) => {

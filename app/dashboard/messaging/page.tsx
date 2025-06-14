@@ -53,12 +53,19 @@ interface Campaign {
   };
   instances: Instance[];
   recipients: Recipient[];
-  status: 'completed' | 'failed' | 'processing' | 'paused';
+  status: 'completed' | 'failed' | 'processing' | 'paused' | 'stopped';
   totalMessages: number;
   sentMessages: number;
   failedMessages: number;
+  notExistMessages?: number;
   createdAt: string;
   delayRange: { start: number; end: number };
+  statistics?: {
+    total: number;
+    sent: number;
+    failed: number;
+    notExist: number;
+  };
 }
 
 interface CampaignStatsType {
@@ -304,8 +311,10 @@ export default function MessagingPage() {
           totalMessages: msg.statistics?.total || msg.recipients?.length || 0,
           sentMessages: msg.statistics?.sent || 0,
           failedMessages: msg.statistics?.failed || 0,
+          notExistMessages: msg.statistics?.notExist || 0,
           createdAt: msg.createdAt,
           delayRange: msg.settings.delayRange,
+          statistics: msg.statistics,
         }));
 
         setCampaigns(mappedCampaigns);

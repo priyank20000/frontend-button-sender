@@ -540,7 +540,7 @@ export default function SelectAudience({
             scroll={{ x: 960 }}
             pagination={{
               pageSize: 10,
-              // showSizeChanger: true,
+              showSizeChanger: false,
               // showQuickJumper: true,
               showTotal: (total, range) =>
                 `${range[0]}-${range[1]} of ${total} items`,

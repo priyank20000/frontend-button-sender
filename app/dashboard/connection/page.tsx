@@ -17,7 +17,7 @@ import {
   X,
   CheckCircle,
   AlertCircle,
-  Info
+  Info,
 } from 'lucide-react';
 
 interface WhatsAppProfile {
@@ -30,6 +30,7 @@ interface Instance {
   _id: string;
   name?: string;
   whatsapp: WhatsAppProfile;
+  createdAt: string;
 }
 
 interface QREvent {
@@ -88,7 +89,6 @@ export default function DevicesPage() {
 
   // Get token from cookies/localStorage
   const getToken = (): string | null => {
-    // Check cookies first
     const cookieToken = document.cookie
       .split('; ')
       .find(row => row.startsWith('token='))
@@ -98,7 +98,6 @@ export default function DevicesPage() {
       return cookieToken;
     }
     
-    // Check localStorage
     const localToken = localStorage.getItem('token');
     if (localToken) {
       return localToken;
@@ -125,7 +124,6 @@ export default function DevicesPage() {
     
     setToasts(prev => [...prev, newToast]);
     
-    // Auto remove after 5 seconds
     setTimeout(() => {
       removeToast(id);
     }, 5000);
@@ -168,14 +166,9 @@ export default function DevicesPage() {
   // Socket connection
   const { emit, on, off, isConnected } = useSocket({
     token,
-    onConnect: () => {
-      // Silent connection - no toast
-    },
-    onDisconnect: () => {
-      // Silent disconnection - no toast
-    },
+    onConnect: () => {},
+    onDisconnect: () => {},
     onError: (error) => {
-      // Only show error toast for authentication issues
       if (error.message.includes('Authentication failed') || error.message.includes('Not authorized')) {
         showToast('Authentication failed. Please log in again.', 'error');
         handleUnauthorized();
@@ -189,7 +182,6 @@ export default function DevicesPage() {
       return;
     }
 
-    // Listen for QR code events
     const handleQREvent = (data: QREvent) => {
       if (data.instanceId === selectedInstanceId) {
         setQrCode(data.qr);
@@ -198,7 +190,6 @@ export default function DevicesPage() {
       }
     };
 
-    // Listen for instance update events
     const handleInstanceUpdate = (data: InstanceUpdateEvent) => {
       setInstances(prev => 
         prev.map(instance => 
@@ -210,13 +201,13 @@ export default function DevicesPage() {
                   phone: data.whatsapp.phone,
                   status: data.whatsapp.status,
                   profile: data.whatsapp.profile
-                }
+                },
+                createdAt: data.createdAt
               }
             : instance
         )
       );
 
-      // If this instance just got connected and we're showing QR for it, close QR and show success
       if (data.whatsapp.status === 'connected' && data.instanceId === selectedInstanceId && showQR) {
         setShowQR(false);
         setConnectedInstance({
@@ -226,7 +217,8 @@ export default function DevicesPage() {
             phone: data.whatsapp.phone,
             status: data.whatsapp.status,
             profile: data.whatsapp.profile
-          }
+          },
+          createdAt: data.createdAt
         });
         setShowSuccessDialog(true);
         setSelectedInstanceId(null);
@@ -244,13 +236,10 @@ export default function DevicesPage() {
   }, [isConnected, selectedInstanceId, showQR, on, off]);
 
   const handleUnauthorized = () => {
-    // Clear tokens
     document.cookie = 'token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
     localStorage.removeItem('token');
     document.cookie = 'user=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
     localStorage.removeItem('user');
-    
-    // Redirect to login
     window.location.href = '/';
   };
 
@@ -264,26 +253,40 @@ export default function DevicesPage() {
 
     setIsLoading(true);
     try {
-      const response = await fetch('https://whatsapp.recuperafly.com/api/instance/all', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({}),
-      });
+      let allInstances: Instance[] = [];
+      let page = 0;
+      const limit = 10;
 
-      if (response.status === 401) {
-        handleUnauthorized();
-        return;
+      while (true) {
+        const response = await fetch('https://whatsapp.recuperafly.com/api/instance/all', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ page, limit }),
+        });
+
+        if (response.status === 401) {
+          handleUnauthorized();
+          return;
+        }
+
+        const data = await response.json();
+        if (data.status) {
+          const fetchedInstances = data.instances || [];
+          allInstances = [...allInstances, ...fetchedInstances];
+          if (fetchedInstances.length < limit || allInstances.length >= data.total) {
+            break;
+          }
+          page++;
+        } else {
+          showToast(data.message || 'Failed to fetch instances', 'error');
+          break;
+        }
       }
 
-      const data = await response.json();
-      if (data.status) {
-        setInstances(data.instances || []);
-      } else {
-        showToast(data.message || 'Failed to fetch instances', 'error');
-      }
+      setInstances(allInstances);
     } catch (err) {
       showToast('Error fetching instances: ' + (err instanceof Error ? err.message : 'Unknown error'), 'error');
     } finally {
@@ -325,6 +328,9 @@ export default function DevicesPage() {
         const newInstance = data.instance;
         setInstances((prev) => [...prev, newInstance]);
         showToast('Instance created successfully', 'success');
+        // Show the page with the new instance
+        const totalPages = Math.ceil((instances.length + 1) / instancesPerPage);
+        setCurrentPage(totalPages);
       } else {
         showToast(data.message || 'Failed to create instance', 'error');
       }
@@ -350,7 +356,7 @@ export default function DevicesPage() {
 
     setIsProcessingQR(prev => ({ ...prev, [instanceId]: true }));
     setSelectedInstanceId(instanceId);
-    setQrCode(''); // Clear previous QR code
+    setQrCode('');
     setShowQR(true);
 
     try {
@@ -377,7 +383,6 @@ export default function DevicesPage() {
       } else {
         showToast('QR code requested, waiting for response...', 'info');
       }
-      // QR code will be received via socket event
     } catch (err) {
       showToast('Error requesting QR code: ' + (err instanceof Error ? err.message : 'Unknown error'), 'error');
       setShowQR(false);
@@ -412,12 +417,15 @@ export default function DevicesPage() {
 
       const data = await response.json();
       if (data.status) {
-        setInstances((prev) => prev.filter((instance) => instance._id !== instanceId));
+        setInstances((prev) => {
+          const newInstances = prev.filter((instance) => instance._id !== instanceId);
+          const totalPages = Math.ceil(newInstances.length / instancesPerPage);
+          if (currentPage > totalPages && totalPages > 0) {
+            setCurrentPage(totalPages);
+          }
+          return newInstances;
+        });
         showToast(data.message || 'Instance deleted successfully', 'success');
-        const totalPages = Math.ceil((instances.length - 1) / instancesPerPage);
-        if (currentPage > totalPages && totalPages > 0) {
-          setCurrentPage(totalPages);
-        }
       } else {
         showToast(data.message || 'Failed to delete instance', 'error');
       }
@@ -568,10 +576,17 @@ export default function DevicesPage() {
     }
   };
 
+  // Sort instances from old to new
+  const sortedInstances = [...instances].sort((a, b) => {
+    const dateA = new Date(a.createdAt).getTime();
+    const dateB = new Date(b.createdAt).getTime();
+    return dateA - dateB;
+  });
+
   const indexOfLastInstance = currentPage * instancesPerPage;
   const indexOfFirstInstance = indexOfLastInstance - instancesPerPage;
-  const currentInstances = instances.slice(indexOfFirstInstance, indexOfLastInstance);
-  const totalPages = Math.ceil(instances.length / instancesPerPage);
+  const currentInstances = sortedInstances.slice(indexOfFirstInstance, indexOfLastInstance);
+  const totalPages = Math.ceil(sortedInstances.length / instancesPerPage);
 
   return (
     <div className="min-h-screen bg-zinc-950 p-4 sm:p-6">
@@ -622,23 +637,25 @@ export default function DevicesPage() {
               )}
             </div>
           </div>
-          <button
-            className="w-full sm:w-auto bg-zinc-800 hover:bg-zinc-700 text-white font-medium px-5 py-2 h-12 rounded-xl transition-all duration-300 flex items-center justify-center gap-2"
-            onClick={handleCreateInstance}
-            disabled={isCreating}
-          >
-            {isCreating ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Creating...
-              </>
-            ) : (
-              <>
-                <Plus className="h-5 w-5" />
-                Create Instance
-              </>
-            )}
-          </button>
+          <div className="flex gap-2">
+            <button
+              className="w-full sm:w-auto bg-zinc-800 hover:bg-zinc-700 text-white font-medium px-5 py-2 h-12 rounded-xl transition-all duration-300 flex items-center justify-center gap-2"
+              onClick={handleCreateInstance}
+              disabled={isCreating}
+            >
+              {isCreating ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Plus className="h-5 w-5" />
+                  Create Instance
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
         {isLoading ? (
@@ -648,7 +665,7 @@ export default function DevicesPage() {
               <p className="text-zinc-400">Loading instances...</p>
             </div>
           </div>
-        ) : instances.length === 0 ? (
+        ) : sortedInstances.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 border border-zinc-800 rounded-xl bg-zinc-900/50">
             <div className="text-center p-8">
               <Phone className="h-16 w-16 text-zinc-600 mx-auto mb-4" />
@@ -790,11 +807,11 @@ export default function DevicesPage() {
           </div>
         )}
 
-        {instances.length > instancesPerPage && (
+        {sortedInstances.length > instancesPerPage && (
           <div className="flex flex-col sm:flex-row justify-between items-center mt-6 sm:mt-8 bg-zinc-900 border border-zinc-800 rounded-xl p-4 gap-4">
             <div className="flex items-center gap-3">
               <span className="text-zinc-400 text-sm">
-                Showing {indexOfFirstInstance + 1}-{Math.min(indexOfLastInstance, instances.length)} of {instances.length} instances
+                Showing {indexOfFirstInstance + 1}-{Math.min(indexOfLastInstance, sortedInstances.length)} of {sortedInstances.length} instances
               </span>
             </div>
             

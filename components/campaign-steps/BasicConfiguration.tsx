@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { AlertCircle, X, Check, ChevronDown, Users, UserCheck, UserX } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface BasicConfigurationProps {
   campaignName: string;
@@ -26,7 +26,15 @@ export default function BasicConfiguration({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
 
-  const connectedInstances = instances.filter(instance => instance.whatsapp.status === 'connected');
+  // Debug instances
+  useEffect(() => {
+    console.log('Instances received:', instances);
+    console.log('Connected instances:', instances.filter(instance => instance.whatsapp.status?.toLowerCase() === 'connected'));
+  }, [instances]);
+
+  const connectedInstances = instances.filter(instance => 
+    instance.whatsapp.status?.toLowerCase() === 'connected'
+  );
   const isAllSelected = selectedInstances.length === connectedInstances.length && connectedInstances.length > 0;
 
   const handleInstanceSelection = (instanceId: string) => {
@@ -46,12 +54,24 @@ export default function BasicConfiguration({
     setSelectedInstances([]);
   };
 
+  const handleDropdownToggle = () => {
+    setIsDropdownOpen(!isDropdownOpen);
+    if (!isDropdownOpen) {
+      setSearchTerm(''); // Reset search term when opening dropdown
+    }
+  };
+
   const filteredInstances = connectedInstances.filter(instance => {
     const name = instance.name || `Device ${instance._id.slice(-4)}`;
     const phone = instance.whatsapp.phone || '';
     return name.toLowerCase().includes(searchTerm.toLowerCase()) || 
            phone.includes(searchTerm);
   });
+
+  // Debug filtered instances
+  useEffect(() => {
+    console.log('Filtered instances:', filteredInstances);
+  }, [filteredInstances]);
 
   const getDisplayText = () => {
     if (selectedInstances.length === 0) {
@@ -131,12 +151,9 @@ export default function BasicConfiguration({
           </div>
         ) : (
           <>
-            {/* Instance count info */}
-          
             <div className="relative">
-              {/* Custom Dropdown Trigger */}
               <div
-                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                onClick={handleDropdownToggle}
                 className="flex items-center justify-between w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md cursor-pointer hover:border-zinc-600 transition-colors"
               >
                 <span className="text-zinc-200 truncate">
@@ -145,10 +162,8 @@ export default function BasicConfiguration({
                 <ChevronDown className={`h-4 w-4 text-zinc-400 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} />
               </div>
 
-              {/* Dropdown Content */}
               {isDropdownOpen && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-zinc-800 border border-zinc-700 rounded-md shadow-lg z-50 max-h-80 overflow-hidden">
-                  {/* Search */}
+                <div className="absolute top-full left-0 right-0 mt-1 bg-zinc-800 border border-zinc-700 rounded-md shadow-lg z-50 max-h-96 overflow-hidden">
                   <div className="p-3 border-b border-zinc-700">
                     <Input
                       placeholder="Search instances..."
@@ -158,8 +173,7 @@ export default function BasicConfiguration({
                     />
                   </div>
 
-                  {/* Instance List with Profile Pictures */}
-                  <div className="max-h-60 overflow-y-auto">
+                  <div className="max-h-80 overflow-y-auto">
                     {filteredInstances.length === 0 ? (
                       <div className="p-4 text-center text-zinc-400">
                         No instances found
@@ -177,7 +191,6 @@ export default function BasicConfiguration({
                             className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
                           />
                           
-                          {/* Profile Picture */}
                           <div className="relative flex-shrink-0">
                             {instance.whatsapp.profile ? (
                               <img
@@ -193,7 +206,7 @@ export default function BasicConfiguration({
                               </div>
                             )}
                             <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-zinc-800 ${
-                              instance.whatsapp.status === 'connected' ? 'bg-emerald-500' : 'bg-red-500'
+                              instance.whatsapp.status?.toLowerCase() === 'connected' ? 'bg-emerald-500' : 'bg-red-500'
                             }`}></div>
                           </div>
 
@@ -219,7 +232,6 @@ export default function BasicConfiguration({
                 </div>
               )}
 
-              {/* Click outside to close */}
               {isDropdownOpen && (
                 <div
                   className="fixed inset-0 z-40"
@@ -227,49 +239,48 @@ export default function BasicConfiguration({
                 />
               )}
             </div>
-          </>
-        )}
 
-        {/* Selected Instances Summary - Only show first 5 */}
-        {selectedInstances.length > 0 && (
-          <div className="mt-4 p-4 bg-zinc-800/50 border border-zinc-700 rounded-lg">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-zinc-400 text-sm font-medium">
-                Selected Instances ({selectedInstances.length})
-              </span>
-              {selectedInstances.length > 5 && (
-                <span className="text-zinc-500 text-xs">
-                  Showing first 5 of {selectedInstances.length}
-                </span>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {selectedInstances.slice(0, 5).map(instanceId => {
-                const instance = instances.find(i => i._id === instanceId);
-                return (
-                  <Badge key={instanceId} variant="outline" className="text-zinc-200 bg-zinc-700/50">
-                    {instance?.name || `Device ${instanceId.slice(-4)}`}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="ml-2 h-4 w-4 p-0 hover:bg-red-500/20"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleInstanceSelection(instanceId);
-                      }}
-                    >
-                      <X className="h-3 w-3 text-red-400" />
-                    </Button>
-                  </Badge>
-                );
-              })}
-              {selectedInstances.length > 5 && (
-                <Badge variant="outline" className="text-zinc-400 bg-zinc-700/30">
-                  +{selectedInstances.length - 5} more
-                </Badge>
-              )}
-            </div>
-          </div>
+            {selectedInstances.length > 0 && (
+              <div className="mt-4 p-4 bg-zinc-800/50 border border-zinc-700 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-zinc-400 text-sm font-medium">
+                    Selected Instances ({selectedInstances.length})
+                  </span>
+                  {selectedInstances.length > 5 && (
+                    <span className="text-zinc-500 text-xs">
+                      Showing first 5 of {selectedInstances.length}
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {selectedInstances.slice(0, 5).map(instanceId => {
+                    const instance = instances.find(i => i._id === instanceId);
+                    return (
+                      <Badge key={instanceId} variant="outline" className="text-zinc-200 bg-zinc-700/50">
+                        {instance?.name || `Device ${instanceId.slice(-4)}`}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="ml-2 h-4 w-4 p-0 hover:bg-red-500/20"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleInstanceSelection(instanceId);
+                          }}
+                        >
+                          <X className="h-3 w-3 text-red-400" />
+                        </Button>
+                      </Badge>
+                    );
+                  })}
+                  {selectedInstances.length > 5 && (
+                    <Badge variant="outline" className="text-zinc-400 bg-zinc-700/30">
+                      +{selectedInstances.length - 5} more
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

@@ -53,19 +53,12 @@ interface Campaign {
   };
   instances: Instance[];
   recipients: Recipient[];
-  status: 'completed' | 'failed' | 'processing' | 'paused' | 'stopped';
+  status: 'completed' | 'failed' | 'processing' | 'paused';
   totalMessages: number;
   sentMessages: number;
   failedMessages: number;
-  notExistMessages?: number;
   createdAt: string;
   delayRange: { start: number; end: number };
-  statistics?: {
-    total: number;
-    sent: number;
-    failed: number;
-    notExist: number;
-  };
 }
 
 interface CampaignStatsType {
@@ -237,59 +230,81 @@ export default function MessagingPage() {
     });
   }, []);
 
-  // Optimized fetch data with better error handling and caching
   const fetchData = useCallback(async (showLoader = true) => {
     const token = await getToken();
     if (!token) {
       router.push('/');
       return;
     }
-
+  
     if (showLoader) {
       setIsLoading(true);
     }
-    
+  
     try {
-      // Fetch instances and campaigns in parallel for better performance
-      const [instanceResponse, campaignResponse] = await Promise.all([
-        fetch('https://whatsapp.recuperafly.com/api/instance/all', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({}),
-        }),
-        fetch('https://whatsapp.recuperafly.com/api/template/message/all', {
+      let allInstances: Instance[] = [];
+      let page = 0;
+      const limit = 10;
+  
+      // Fetch instances with pagination and connected status filter
+      while (true) {
+        const instanceResponse = await fetch('https://whatsapp.recuperafly.com/api/instance/all', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            page: currentPage - 1,
-            limit: campaignsPerPage,
-            search: searchValue,
-            status: statusFilter === 'all' ? undefined : statusFilter
+            page,
+            limit,
+            instance_status: 'connected', // Add filter for connected instances
           }),
-        })
-      ]);
-
-      if (instanceResponse.status === 401 || campaignResponse.status === 401) {
+        });
+  
+        if (instanceResponse.status === 401) {
+          handleUnauthorized();
+          return;
+        }
+  
+        const instanceData = await instanceResponse.json();
+        if (instanceData.status) {
+          const fetchedInstances = instanceData.instances || [];
+          allInstances = [...allInstances, ...fetchedInstances];
+          console.log('Fetched instances:', fetchedInstances); // Debug
+          if (fetchedInstances.length < limit || allInstances.length >= instanceData.total) {
+            break;
+          }
+          page++;
+        } else {
+          showToast(instanceData.message || 'Failed to fetch instances', 'error');
+          break;
+        }
+      }
+  
+      setInstances(allInstances);
+      console.log('All connected instances:', allInstances); // Debug
+  
+      // Fetch campaigns (unchanged)
+      const campaignResponse = await fetch('https://whatsapp.recuperafly.com/api/template/message/all', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          page: currentPage - 1,
+          limit: campaignsPerPage,
+          search: searchValue,
+          status: statusFilter === 'all' ? undefined : statusFilter,
+        }),
+      });
+  
+      if (campaignResponse.status === 401) {
         handleUnauthorized();
         return;
       }
-
-      const [instanceData, campaignData] = await Promise.all([
-        instanceResponse.json(),
-        campaignResponse.json()
-      ]);
-
-      // Process instances
-      const fetchedInstances = instanceData.status ? instanceData.instances || [] : [];
-      setInstances(fetchedInstances);
-
-      // Process campaigns
+  
+      const campaignData = await campaignResponse.json();
       if (campaignData.status) {
         const mappedCampaigns: Campaign[] = campaignData.messages.map((msg: any) => ({
           _id: msg._id,
@@ -300,7 +315,7 @@ export default function MessagingPage() {
             messageType: 'Text',
           },
           instances: (msg.instanceIds || [])
-            .map((id: string) => fetchedInstances.find((inst: Instance) => inst._id === id))
+            .map((id: string) => allInstances.find((inst: Instance) => inst._id === id))
             .filter((inst: Instance | undefined) => inst !== undefined),
           recipients: msg.recipients.map((rec: any) => ({
             phone: rec.phone,
@@ -311,23 +326,20 @@ export default function MessagingPage() {
           totalMessages: msg.statistics?.total || msg.recipients?.length || 0,
           sentMessages: msg.statistics?.sent || 0,
           failedMessages: msg.statistics?.failed || 0,
-          notExistMessages: msg.statistics?.notExist || 0,
           createdAt: msg.createdAt,
           delayRange: msg.settings.delayRange,
-          statistics: msg.statistics,
         }));
-
+  
         setCampaigns(mappedCampaigns);
         setTotalCampaigns(campaignData.total || 0);
-        
-        // Calculate stats properly
+  
         const stats = {
           total: campaignData.total || 0,
           completed: mappedCampaigns.filter(c => c.status === 'completed').length,
           failed: mappedCampaigns.filter(c => c.status === 'failed').length,
           processing: mappedCampaigns.filter(c => c.status === 'processing').length,
         };
-        
+  
         setCampaignStats(stats);
       } else {
         showToast(campaignData.message || 'Failed to fetch campaigns', 'error');

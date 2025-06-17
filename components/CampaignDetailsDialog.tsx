@@ -6,6 +6,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ChevronLeft, ChevronRight, RefreshCw, Pause, Play, StopCircle, Loader2, Users, CheckCircle, XCircle, AlertTriangle, Wifi, WifiOff } from 'lucide-react';
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useSocket } from "../hooks/useSocket";
 import Cookies from 'js-cookie';
 
@@ -25,6 +27,8 @@ interface Campaign {
     notExist: number;
   };
   instances?: any[];
+  instanceIds?: string[]; // Ensure instanceIds is part of the Campaign interface
+  delayRange?: { start: number; end: number };
 }
 
 interface CampaignDetailsDialogProps {
@@ -53,6 +57,9 @@ export default function CampaignDetailsDialog({
   const [instancesDisconnected, setInstancesDisconnected] = useState(false);
   const [disconnectionReason, setDisconnectionReason] = useState<string>('');
   const [canResumeAfterReconnect, setCanResumeAfterReconnect] = useState(false);
+  const [delayRange, setDelayRange] = useState<{ start: number; end: number }>(
+    campaign?.delayRange || { start: 1, end: 1 }
+  );
 
   const isStoppingRef = useRef(false);
   const isPausingRef = useRef(false);
@@ -94,7 +101,7 @@ export default function CampaignDetailsDialog({
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ instance_status: 'connected' }), // Filter for connected instances
       });
 
       if (response.status === 401) return;
@@ -192,28 +199,37 @@ export default function CampaignDetailsDialog({
     }
 
     lastInstanceStatusRef.current = currentInstanceStatuses;
-  }, [campaignStarted.current, selectedInstances, instances, isProcessing, isPaused, instancesDisconnected, campaignData, getToken]);
+  }, [selectedInstances, instances, isProcessing, isPaused, instancesDisconnected, campaignData, getToken]);
 
   const checkInstanceConnections = useCallback(() => {
     checkInstanceConnectionsImmediate();
   }, [checkInstanceConnectionsImmediate]);
 
   useEffect(() => {
-    if (campaignData && selectedInstances.length > 0) {
-      const initialStatuses: { [key: string]: string } = {};
-      selectedInstances.forEach(instanceId => {
-        const instance = instances.find(inst => inst._id === instanceId);
-        initialStatuses[instanceId] = instance?.whatsapp?.status || 'disconnected';
-      });
-      lastInstanceStatusRef.current = initialStatuses;
-      
-      checkInstanceConnectionsImmediate();
+    if (campaignData && open) {
+      // Initialize selectedInstances from campaignData.instanceIds
+      if (campaignData.instanceIds && selectedInstances.length === 0) {
+        setSelectedInstances(campaignData.instanceIds);
+      }
+      // Initialize instance statuses
+      if (selectedInstances.length > 0) {
+        const initialStatuses: { [key: string]: string } = {};
+        selectedInstances.forEach(instanceId => {
+          const instance = instances.find(inst => inst._id === instanceId);
+          initialStatuses[instanceId] = instance?.whatsapp?.status || 'disconnected';
+        });
+        lastInstanceStatusRef.current = initialStatuses;
+        checkInstanceConnectionsImmediate();
+      }
     }
-  }, [campaignData, selectedInstances, instances, checkInstanceConnectionsImmediate]);
+  }, [campaignData, open, selectedInstances, instances, checkInstanceConnectionsImmediate]);
 
   useEffect(() => {
     if (open && selectedInstances.length > 0) {
-      checkInstanceConnections();
+      // Fetch instances immediately on open
+      fetchInstances().then(() => {
+        checkInstanceConnections();
+      });
       
       instanceCheckIntervalRef.current = setInterval(() => {
         fetchInstances();
@@ -253,7 +269,6 @@ export default function CampaignDetailsDialog({
       statuses[index] = 'not_exist';
     }
   
-    // Set all remaining pending statuses to "stopped" if campaign is stopped
     if (campaign.status === 'stopped') {
       for (let i = 0; i < statuses.length; i++) {
         if (statuses[i] === 'pending') {
@@ -262,7 +277,6 @@ export default function CampaignDetailsDialog({
       }
     }
   
-    // Override with individual recipient status from backend, but only for non-pending statuses
     campaign.recipients.forEach((recipient: any, idx: number) => {
       if (recipient.status && recipient.status !== 'pending' && statuses[idx] !== 'stopped') {
         statuses[idx] = recipient.status === 'not_exist' ? 'not_exist' : recipient.status;
@@ -293,6 +307,8 @@ export default function CampaignDetailsDialog({
         if (data.status && data.message) {
           const detailedCampaign = data.message;
   
+          const newDelayRange = campaign?.delayRange || detailedCampaign.delayRange || { start: 1, end: 1 };
+  
           setCampaignData((prev) => ({
             ...prev,
             ...detailedCampaign,
@@ -300,9 +316,13 @@ export default function CampaignDetailsDialog({
             sentMessages: detailedCampaign.statistics?.sent || 0,
             failedMessages: detailedCampaign.statistics?.failed || 0,
             notExistMessages: detailedCampaign.statistics?.notExist || 0,
+            delayRange: newDelayRange,
+            instanceIds: detailedCampaign.instanceIds || prev?.instanceIds || [], // Ensure instanceIds is set
           }));
   
-          if (detailedCampaign.instanceIds) {
+          setDelayRange(newDelayRange);
+  
+          if (detailedCampaign.instanceIds && selectedInstances.length === 0) {
             setSelectedInstances(detailedCampaign.instanceIds);
           }
   
@@ -338,22 +358,29 @@ export default function CampaignDetailsDialog({
     } finally {
       setIsLoadingDetails(false);
     }
-  }, [token, updateRecipientStatuses]);
+  }, [token, updateRecipientStatuses, campaign?.delayRange]);
 
   useEffect(() => {
     if (campaign && open && !hasLoadedDetailsRef.current) {
       setCampaignData(campaign);
+      setSelectedInstances(campaign.instanceIds || []); // Initialize selectedInstances on open
       setIsPaused(campaign.status === 'paused');
       setIsStopped(campaign.status === 'stopped');
       setIsProcessing(campaign.status === 'processing');
+      setDelayRange(campaign.delayRange || { start: 1, end: 1 });
+      setInstancesDisconnected(false); // Reset disconnection state
+      setDisconnectionReason('');
+      setCanResumeAfterReconnect(false);
       hasCompletedRef.current = campaign.status === 'completed' || campaign.status === 'stopped';
       
       if (campaign.status === 'processing' || campaign.status === 'paused') {
         campaignStarted.current = true;
       }
       
-      loadCampaignDetails(campaign._id);
-      fetchInstances();
+      // Fetch details and instances sequentially
+      loadCampaignDetails(campaign._id).then(() => {
+        fetchInstances();
+      });
     }
   }, [campaign, open, loadCampaignDetails, fetchInstances]);
 
@@ -387,6 +414,8 @@ export default function CampaignDetailsDialog({
               failedMessages: data.failed || 0,
               notExistMessages: data.notExist || 0,
               totalMessages: data.total || prev.totalMessages,
+              delayRange: data.delayRange || prev.delayRange,
+              instanceIds: data.instanceIds || prev.instanceIds || [],
             }
           : null
       );
@@ -468,6 +497,8 @@ export default function CampaignDetailsDialog({
               sentMessages: data.sent || 0,
               failedMessages: data.failed || 0,
               notExistMessages: data.notExist || 0,
+              delayRange: data.delayRange || prev.delayRange,
+              instanceIds: data.instanceIds || prev.instanceIds || [],
             }
           : null
       );
@@ -485,7 +516,7 @@ export default function CampaignDetailsDialog({
       setRecipientStatuses((prev) => {
         const newStatuses = [...prev];
         const sentCount = data.sent || 0;
-        const failedCount = data.failed || 0.
+        const failedCount = data.failed || 0;
         const notExistCount = data.notExist || 0;
 
         let index = 0;
@@ -517,43 +548,42 @@ export default function CampaignDetailsDialog({
   );
 
   const handleCampaignStopped = useCallback(
-  (data: any) => {
-    if (!campaignData || data.campaignId !== campaignData._id) return;
-    console.log('Campaign stopped:', data);
-    setIsStopped(true);
-    setIsProcessing(false);
-    setIsPaused(false);
-    setInstancesDisconnected(false);
-    setCanResumeAfterReconnect(false);
-    campaignStarted.current = false;
-    isStoppingRef.current = false;
-    isPausingRef.current = false;
-    isResumingRef.current = false;
-    setCampaignData((prev) =>
-      prev
-        ? {
-            ...prev,
-            status: 'stopped',
-            sentMessages: data.sent || prev.sentMessages,
-            failedMessages: data.failed || prev.failedMessages,
-            notExistMessages: data.notExist || prev.notExistMessages,
-          }
-        : null
-    );
-    setRecipientStatuses((prev) => {
-      const newStatuses = [...prev];
-      return newStatuses.map((status) => (status === 'pending' ? 'stopped' : status));
-    });
-    if (!hasCompletedRef.current) {
-      hasCompletedRef.current = true;
-      setTimeout(() => {
-        console.log('Final refresh after campaign stopped');
-        loadCampaignDetails(data.campaignId, true);
-      }, 1500);
-    }
-  },
-  [campaignData, loadCampaignDetails]
-);
+    (data: any) => {
+      if (!campaignData || data.campaignId !== campaignData._id) return;
+  
+      console.log('Campaign stopped:', data);
+  
+      setIsStopped(true);
+      setIsProcessing(false);
+      setIsPaused(false);
+      setInstancesDisconnected(false);
+      setCanResumeAfterReconnect(false);
+      campaignStarted.current = false;
+      isStoppingRef.current = false;
+      isPausingRef.current = false;
+      isResumingRef.current = false;
+  
+      setCampaignData((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: 'stopped',
+              sentMessages: data.sent || prev.sentMessages,
+              failedMessages: data.failed || prev.failedMessages,
+              notExistMessages: data.notExist || prev.notExistMessages,
+              delayRange: data.delayRange || prev.delayRange,
+              instanceIds: data.instanceIds || prev.instanceIds || [],
+            }
+          : null
+      );
+  
+      setRecipientStatuses((prev) => {
+        const newStatuses = [...prev];
+        return newStatuses.map((status) => (status === 'pending' ? 'stopped' : status));
+      });
+    },
+    [campaignData]
+  );
   
   const handleCampaignPaused = useCallback(
     (data: any) => {
@@ -574,7 +604,16 @@ export default function CampaignDetailsDialog({
         setCanResumeAfterReconnect(false);
       }
 
-      setCampaignData((prev) => (prev ? { ...prev, status: 'paused' } : null));
+      setCampaignData((prev) => 
+        prev 
+          ? { 
+              ...prev, 
+              status: 'paused',
+              delayRange: data.delayRange || prev.delayRange,
+              instanceIds: data.instanceIds || prev.instanceIds || [],
+            } 
+          : null
+      );
     },
     [campaignData]
   );
@@ -596,7 +635,16 @@ export default function CampaignDetailsDialog({
       isPausingRef.current = false;
       isResumingRef.current = false;
 
-      setCampaignData((prev) => (prev ? { ...prev, status: 'processing' } : null));
+      setCampaignData((prev) => 
+        prev 
+          ? { 
+              ...prev, 
+              status: 'processing',
+              delayRange: data.delayRange || prev.delayRange,
+              instanceIds: data.instanceIds || prev.instanceIds || [],
+            } 
+          : null
+      );
     },
     [campaignData]
   );
@@ -696,16 +744,21 @@ export default function CampaignDetailsDialog({
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
 
+        const payload = {
+          campaignId: campaignData._id,
+          action,
+          ...(action === 'resume' && { delayRange }),
+        };
+
+        console.log('Sending campaign control payload:', payload);
+
         const response = await fetch('https://whatsapp.recuperafly.com/api/template/campaign/control', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${authToken}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            campaignId: campaignData._id,
-            action,
-          }),
+          body: JSON.stringify(payload),
           signal: controller.signal,
         });
 
@@ -714,6 +767,13 @@ export default function CampaignDetailsDialog({
 
         if (result.status) {
           console.log(`Campaign ${action} signal sent successfully`);
+          if (action === 'resume') {
+            setCampaignData((prev) => 
+              prev 
+                ? { ...prev, delayRange } 
+                : null
+            );
+          }
         } else {
           console.error(`Campaign ${action} failed:`, result.message);
           if (action === 'stop') {
@@ -761,7 +821,7 @@ export default function CampaignDetailsDialog({
         }
       }
     },
-    [campaignData, getToken, instancesDisconnected, instances, selectedInstances]
+    [campaignData, getToken, instancesDisconnected, instances, selectedInstances, delayRange]
   );
 
   const handleStopCampaign = useCallback(() => handleCampaignControl('stop'), [handleCampaignControl]);
@@ -782,10 +842,12 @@ export default function CampaignDetailsDialog({
       setIsProcessing(false);
       setIsLoadingDetails(false);
       setStatusFilter('all');
+      setInstances([]);
+      setSelectedInstances([]);
       setInstancesDisconnected(false);
       setDisconnectionReason('');
       setCanResumeAfterReconnect(false);
-      setSelectedInstances([]);
+      setDelayRange({ start: 1, end: 1 });
       
       isStoppingRef.current = false;
       isPausingRef.current = false;
@@ -1066,6 +1128,36 @@ export default function CampaignDetailsDialog({
             </div>
           )}
 
+          {isPaused && (
+            <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-6">
+              <h4 className="text-lg font-semibold text-white mb-4">Adjust Delay Configuration</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-zinc-400">Start Delay (seconds)</Label>
+                  <Input
+                    type="number"
+                    value={delayRange.start}
+                    onChange={(e) => setDelayRange({ ...delayRange, start: parseInt(e.target.value) || 1 })}
+                    className="bg-zinc-800 border-zinc-700 text-zinc-200"
+                    min="1"
+                    disabled={!canResume}
+                  />
+                </div>
+                <div>
+                  <Label className="text-zinc-400">End Delay (seconds)</Label>
+                  <Input
+                    type="number"
+                    value={delayRange.end}
+                    onChange={(e) => setDelayRange({ ...delayRange, end: parseInt(e.target.value) || 1 })}
+                    className="bg-zinc-800 border-zinc-700 text-zinc-200"
+                    min="1"
+                    disabled={!canResume}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           {isLoadingDetails && (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
@@ -1083,7 +1175,7 @@ export default function CampaignDetailsDialog({
                 </div>
                 <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4">
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-green-400">{sentCount}</div>
+                    <div className="text-2xl font-bold text-green-500">{sentCount}</div>
                     <div className="text-sm text-green-300">Sent</div>
                   </div>
                 </div>
@@ -1096,7 +1188,7 @@ export default function CampaignDetailsDialog({
                 <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4">
                   <div className="text-center">
                     <div className="text-2xl font-bold text-orange-400">{notExistCount}</div>
-                    <div className="text-sm text-orange-300">Not on WhatsApp</div>
+                    <div className="text-sm text-orange-300">Error</div>
                   </div>
                 </div>
               </div>
@@ -1112,7 +1204,7 @@ export default function CampaignDetailsDialog({
                       }}
                       variant={statusFilter === 'all' ? 'default' : 'outline'}
                       size="sm"
-                      className={statusFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700'}
+                      className={statusFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-zinc-800 border-zinc-700 text-white hover:bg-gray-700'}
                     >
                       <Users className="h-4 w-4 mr-2" />
                       All ({campaignData.recipients?.length || 0})
@@ -1124,7 +1216,7 @@ export default function CampaignDetailsDialog({
                       }}
                       variant={statusFilter === 'sent' ? 'default' : 'outline'}
                       size="sm"
-                      className={statusFilter === 'sent' ? 'bg-green-600 text-white' : 'bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700'}
+                      className={statusFilter === 'sent' ? 'bg-green-600 text-white' : 'bg-zinc-800 border-zinc-700 text-white hover:bg-gray-700'}
                     >
                       <CheckCircle className="h-4 w-4 mr-2" />
                       Sent ({sentCount})
@@ -1136,7 +1228,7 @@ export default function CampaignDetailsDialog({
                       }}
                       variant={statusFilter === 'failed' ? 'default' : 'outline'}
                       size="sm"
-                      className={statusFilter === 'failed' ? 'bg-red-600 text-white' : 'bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700'}
+                      className={statusFilter === 'failed' ? 'bg-red-600 text-white' : 'bg-zinc-800 border-zinc-700 text-white hover:bg-gray-700'}
                     >
                       <XCircle className="h-4 w-4 mr-2" />
                       Failed ({failedCount})
@@ -1148,10 +1240,10 @@ export default function CampaignDetailsDialog({
                       }}
                       variant={statusFilter === 'not_exist' ? 'default' : 'outline'}
                       size="sm"
-                      className={statusFilter === 'not_exist' ? 'bg-orange-600 text-white' : 'bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700'}
+                      className={statusFilter === 'not_exist' ? 'bg-orange-600 text-white' : 'bg-zinc-800 border-zinc-700 text-white hover:bg-gray-700'}
                     >
                       <AlertTriangle className="h-4 w-4 mr-2" />
-                      Not on WhatsApp ({notExistCount})
+                      Error ({notExistCount})
                     </Button>
                   </div>
                 </div>
@@ -1197,7 +1289,7 @@ export default function CampaignDetailsDialog({
                           <Badge variant="outline" className="ml-2 text-zinc-300">
                             {statusFilter === 'sent' && 'Sent'}
                             {statusFilter === 'failed' && 'Failed'}
-                            {statusFilter === 'not_exist' && 'Not on WhatsApp'}
+                            {statusFilter === 'not_exist' && 'Error'}
                           </Badge>
                         )}
                       </span>
@@ -1209,7 +1301,7 @@ export default function CampaignDetailsDialog({
                         className={`h-9 w-9 rounded-full transition-all duration-200 flex items-center justify-center ${
                           currentPage === 1
                             ? 'text-zinc-600 cursor-not-allowed'
-                            : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700'
+                            : 'text-zinc-400 hover:text-white hover:bg-gray-700'
                         }`}
                         aria-label="Previous page"
                       >
@@ -1234,8 +1326,8 @@ export default function CampaignDetailsDialog({
                               onClick={() => setCurrentPage(page)}
                               className={`h-9 w-9 rounded-full transition-all duration-200 ${
                                 currentPage === page
-                                  ? 'bg-zinc-700 text-white hover:bg-zinc-600'
-                                  : 'bg-transparent hover:bg-zinc-700 text-zinc-400 hover:text-zinc-200'
+                                  ? 'bg-zinc-700 text-white hover:bg-gray-600'
+                                  : 'bg-transparent hover:bg-gray-700 text-zinc-400 hover:text-white'
                               }`}
                               aria-label={`Page ${page}`}
                             >
@@ -1250,7 +1342,7 @@ export default function CampaignDetailsDialog({
                         className={`h-9 w-9 rounded-full transition-all duration-200 flex items-center justify-center ${
                           currentPage === totalPages
                             ? 'text-zinc-600 cursor-not-allowed'
-                            : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700'
+                            : 'text-zinc-400 hover:text-white hover:bg-gray-700'
                         }`}
                         aria-label="Next page"
                       >

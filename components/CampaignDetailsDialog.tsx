@@ -27,7 +27,6 @@ interface Campaign {
     notExist: number;
   };
   instances?: any[];
-  instanceIds?: string[]; // Ensure instanceIds is part of the Campaign interface
   delayRange?: { start: number; end: number };
 }
 
@@ -101,7 +100,7 @@ export default function CampaignDetailsDialog({
           'Authorization': `Bearer ${authToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ instance_status: 'connected' }), // Filter for connected instances
+        body: JSON.stringify({}),
       });
 
       if (response.status === 401) return;
@@ -199,37 +198,28 @@ export default function CampaignDetailsDialog({
     }
 
     lastInstanceStatusRef.current = currentInstanceStatuses;
-  }, [selectedInstances, instances, isProcessing, isPaused, instancesDisconnected, campaignData, getToken]);
+  }, [campaignStarted.current, selectedInstances, instances, isProcessing, isPaused, instancesDisconnected, campaignData, getToken]);
 
   const checkInstanceConnections = useCallback(() => {
     checkInstanceConnectionsImmediate();
   }, [checkInstanceConnectionsImmediate]);
 
   useEffect(() => {
-    if (campaignData && open) {
-      // Initialize selectedInstances from campaignData.instanceIds
-      if (campaignData.instanceIds && selectedInstances.length === 0) {
-        setSelectedInstances(campaignData.instanceIds);
-      }
-      // Initialize instance statuses
-      if (selectedInstances.length > 0) {
-        const initialStatuses: { [key: string]: string } = {};
-        selectedInstances.forEach(instanceId => {
-          const instance = instances.find(inst => inst._id === instanceId);
-          initialStatuses[instanceId] = instance?.whatsapp?.status || 'disconnected';
-        });
-        lastInstanceStatusRef.current = initialStatuses;
-        checkInstanceConnectionsImmediate();
-      }
+    if (campaignData && selectedInstances.length > 0) {
+      const initialStatuses: { [key: string]: string } = {};
+      selectedInstances.forEach(instanceId => {
+        const instance = instances.find(inst => inst._id === instanceId);
+        initialStatuses[instanceId] = instance?.whatsapp?.status || 'disconnected';
+      });
+      lastInstanceStatusRef.current = initialStatuses;
+      
+      checkInstanceConnectionsImmediate();
     }
-  }, [campaignData, open, selectedInstances, instances, checkInstanceConnectionsImmediate]);
+  }, [campaignData, selectedInstances, instances, checkInstanceConnectionsImmediate]);
 
   useEffect(() => {
     if (open && selectedInstances.length > 0) {
-      // Fetch instances immediately on open
-      fetchInstances().then(() => {
-        checkInstanceConnections();
-      });
+      checkInstanceConnections();
       
       instanceCheckIntervalRef.current = setInterval(() => {
         fetchInstances();
@@ -317,12 +307,11 @@ export default function CampaignDetailsDialog({
             failedMessages: detailedCampaign.statistics?.failed || 0,
             notExistMessages: detailedCampaign.statistics?.notExist || 0,
             delayRange: newDelayRange,
-            instanceIds: detailedCampaign.instanceIds || prev?.instanceIds || [], // Ensure instanceIds is set
           }));
   
           setDelayRange(newDelayRange);
   
-          if (detailedCampaign.instanceIds && selectedInstances.length === 0) {
+          if (detailedCampaign.instanceIds) {
             setSelectedInstances(detailedCampaign.instanceIds);
           }
   
@@ -341,9 +330,9 @@ export default function CampaignDetailsDialog({
             hasLoadedDetailsRef.current = true;
           }
   
-          if ((detailedCampaign.status === 'completed' || detailedCampaign.status === 'stopped') && !hasCompletedRef.current && !autoRefreshTimeoutRef.current) {
+          if ((detailedCampaign.status === 'completed' || (detailedCampaign.status === 'stopped') && !hasCompletedRef.current && !autoRefreshTimeoutRef.current)) {
             hasCompletedRef.current = true;
-            autoRefreshTimeoutRef.current = setTimeout(() => {
+            autoRefreshTimeout.current = setTimeout(autoRefreshTimeoutRef => {
               console.log('Final auto-refresh for completed/stopped campaign');
               loadCampaignDetails(campaignId, true);
               autoRefreshTimeoutRef.current = null;
@@ -363,24 +352,18 @@ export default function CampaignDetailsDialog({
   useEffect(() => {
     if (campaign && open && !hasLoadedDetailsRef.current) {
       setCampaignData(campaign);
-      setSelectedInstances(campaign.instanceIds || []); // Initialize selectedInstances on open
       setIsPaused(campaign.status === 'paused');
       setIsStopped(campaign.status === 'stopped');
       setIsProcessing(campaign.status === 'processing');
       setDelayRange(campaign.delayRange || { start: 1, end: 1 });
-      setInstancesDisconnected(false); // Reset disconnection state
-      setDisconnectionReason('');
-      setCanResumeAfterReconnect(false);
       hasCompletedRef.current = campaign.status === 'completed' || campaign.status === 'stopped';
       
       if (campaign.status === 'processing' || campaign.status === 'paused') {
         campaignStarted.current = true;
       }
       
-      // Fetch details and instances sequentially
-      loadCampaignDetails(campaign._id).then(() => {
-        fetchInstances();
-      });
+      loadCampaignDetails(campaign._id);
+      fetchInstances();
     }
   }, [campaign, open, loadCampaignDetails, fetchInstances]);
 
@@ -415,7 +398,6 @@ export default function CampaignDetailsDialog({
               notExistMessages: data.notExist || 0,
               totalMessages: data.total || prev.totalMessages,
               delayRange: data.delayRange || prev.delayRange,
-              instanceIds: data.instanceIds || prev.instanceIds || [],
             }
           : null
       );
@@ -498,7 +480,6 @@ export default function CampaignDetailsDialog({
               failedMessages: data.failed || 0,
               notExistMessages: data.notExist || 0,
               delayRange: data.delayRange || prev.delayRange,
-              instanceIds: data.instanceIds || prev.instanceIds || [],
             }
           : null
       );
@@ -572,7 +553,6 @@ export default function CampaignDetailsDialog({
               failedMessages: data.failed || prev.failedMessages,
               notExistMessages: data.notExist || prev.notExistMessages,
               delayRange: data.delayRange || prev.delayRange,
-              instanceIds: data.instanceIds || prev.instanceIds || [],
             }
           : null
       );
@@ -610,7 +590,6 @@ export default function CampaignDetailsDialog({
               ...prev, 
               status: 'paused',
               delayRange: data.delayRange || prev.delayRange,
-              instanceIds: data.instanceIds || prev.instanceIds || [],
             } 
           : null
       );
@@ -641,7 +620,6 @@ export default function CampaignDetailsDialog({
               ...prev, 
               status: 'processing',
               delayRange: data.delayRange || prev.delayRange,
-              instanceIds: data.instanceIds || prev.instanceIds || [],
             } 
           : null
       );
@@ -842,11 +820,10 @@ export default function CampaignDetailsDialog({
       setIsProcessing(false);
       setIsLoadingDetails(false);
       setStatusFilter('all');
-      setInstances([]);
-      setSelectedInstances([]);
       setInstancesDisconnected(false);
       setDisconnectionReason('');
       setCanResumeAfterReconnect(false);
+      setSelectedInstances([]);
       setDelayRange({ start: 1, end: 1 });
       
       isStoppingRef.current = false;

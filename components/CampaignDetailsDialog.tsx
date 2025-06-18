@@ -108,34 +108,48 @@ export default function CampaignDetailsDialog({
   // Fetch instances logic from the first code
   const fetchInstances = useCallback(async (force = false) => {
     const now = Date.now();
-    if (!force && now - lastInstanceFetchRef.current < 3000) return; // Reduced frequency
+    if (!force && now - lastInstanceFetchRef.current < 3000) return;
     lastInstanceFetchRef.current = now;
 
     const authToken = getToken();
     if (!authToken) return;
 
+    let allInstances: any[] = [];
+    let page = 0;
+    const limit = 400;
+    let hasMore = true;
+
     try {
-      const response = await fetch('https://whatsapp.recuperafly.com/api/instance/all', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ instance_status: 'connected' }),
-      });
+        while (hasMore) {
+            const response = await fetch('https://whatsapp.recuperafly.com/api/instance/all', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${authToken}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ page, limit, instance_status: 'connected' }),
+            });
 
-      if (response.status === 401) return;
+            if (response.status === 401) return [];
 
-      const data = await response.json();
-      if (data.status && data.instances) {
-        setInstances(data.instances);
-        return data.instances;
-      }
+            const data = await response.json();
+            if (data.status && data.instances) {
+                allInstances = [...allInstances, ...data.instances];
+                // Check if there are more pages (e.g., if the response includes fewer instances than the limit)
+                hasMore = data.instances.length === limit;
+                page += 1;
+            } else {
+                hasMore = false;
+            }
+        }
+
+        setInstances(allInstances);
+        return allInstances;
     } catch (error) {
-      console.error('Error fetching instances:', error);
+        console.error('Error fetching instances:', error);
+        return [];
     }
-    return [];
-  }, [getToken]);
+}, [getToken]);
 
   // Update connection status logic from the first code
   const checkInstanceConnectionsImmediate = useCallback((instancesData: any[] = instances) => {

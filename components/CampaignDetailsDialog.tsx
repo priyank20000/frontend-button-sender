@@ -31,6 +31,15 @@ interface Campaign {
   delayRange?: { start: number; end: number };
 }
 
+interface ConnectionStatus {
+  isConnected: boolean;
+  message: string;
+  subMessage: string;
+  connectedCount: number;
+  totalCount: number;
+  isLoading: boolean;
+}
+
 interface CampaignDetailsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -45,7 +54,7 @@ export default function CampaignDetailsDialog({
   const [currentPage, setCurrentPage] = useState(1);
   const recipientsPerPage = 10;
   const [recipientStatuses, setRecipientStatuses] = useState<string[]>([]);
-  const [campaignData, setCampaignData] = useState<Campaign | null>(null);
+  const [campaignData, setCampaignData] = useState<Campaign | null>(campaign);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [isStopped, setIsStopped] = useState(false);
@@ -54,30 +63,30 @@ export default function CampaignDetailsDialog({
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [instances, setInstances] = useState<any[]>([]);
   const [selectedInstances, setSelectedInstances] = useState<string[]>([]);
-  const [connectionStatus, setConnectionStatus] = useState({
-    isConnected: false,
-    message: 'Checking connection...',
-    subMessage: '',
-    connectedCount: 0,
-    totalCount: 0
-  });
-  const [delayRange, setDelayRange] = useState<{ start: number; end: number }>({ start: 1, end: 1 });
+  const [delayRange, setDelayRange] = useState<{ start: number; end: number }>(
+    campaign?.delayRange || { start: 1, end: 1 }
+  );
 
-  // Control refs
+  // Instance connection state
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>({
+    isConnected: false,
+    message: 'Initializing...',
+    subMessage: 'Setting up connection monitoring',
+    connectedCount: 0,
+    totalCount: 0,
+    isLoading: true
+  });
+
   const isStoppingRef = useRef(false);
   const isPausingRef = useRef(false);
   const isResumingRef = useRef(false);
-  
-  // Cleanup refs
-  const instanceCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const autoRefreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  
-  // State tracking refs
+  const lastProgressUpdateRef = useRef<number>(0);
   const hasLoadedDetailsRef = useRef(false);
+  const autoRefreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasCompletedRef = useRef(false);
   const socketListenersSetupRef = useRef(false);
-  const campaignStarted = useRef(false);
-  const lastFetchTime = useRef(0);
+  const instanceCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const lastInstanceFetchRef = useRef(0);
 
   const getToken = useCallback((): string | null => {
     if (typeof window === 'undefined') return null;
@@ -96,13 +105,11 @@ export default function CampaignDetailsDialog({
     onError: (error) => console.error('Socket error:', error),
   });
 
-  // Debounced instance fetching to prevent excessive API calls
-  const fetchInstances = useCallback(async () => {
+  // Fetch instances logic from the first code
+  const fetchInstances = useCallback(async (force = false) => {
     const now = Date.now();
-    if (now - lastFetchTime.current < 2000) { // Minimum 2 seconds between fetches
-      return;
-    }
-    lastFetchTime.current = now;
+    if (!force && now - lastInstanceFetchRef.current < 3000) return; // Reduced frequency
+    lastInstanceFetchRef.current = now;
 
     const authToken = getToken();
     if (!authToken) return;
@@ -120,25 +127,26 @@ export default function CampaignDetailsDialog({
       if (response.status === 401) return;
 
       const data = await response.json();
-      if (data.status) {
-        const fetchedInstances = data.instances || [];
-        setInstances(fetchedInstances);
-        updateConnectionStatus(fetchedInstances);
+      if (data.status && data.instances) {
+        setInstances(data.instances);
+        return data.instances;
       }
-    } catch (err) {
-      console.error('Error fetching instances:', err);
+    } catch (error) {
+      console.error('Error fetching instances:', error);
     }
+    return [];
   }, [getToken]);
 
-  // Centralized connection status update
-  const updateConnectionStatus = useCallback((instancesData: any[] = instances) => {
+  // Update connection status logic from the first code
+  const checkInstanceConnectionsImmediate = useCallback((instancesData: any[] = instances) => {
     if (selectedInstances.length === 0) {
       setConnectionStatus({
         isConnected: false,
-        message: '❓ No Instances Selected',
-        subMessage: 'No instances to monitor',
+        message: 'No instances selected',
+        subMessage: 'Select instances to monitor connection',
         connectedCount: 0,
-        totalCount: 0
+        totalCount: 0,
+        isLoading: false
       });
       return;
     }
@@ -151,41 +159,84 @@ export default function CampaignDetailsDialog({
     const connectedCount = connectedInstances.length;
     const totalCount = selectedInstances.length;
 
-    let status;
-    if (connectedCount === 0) {
+    let status: ConnectionStatus;
+    
+    if (connectedCount === totalCount && totalCount > 0) {
       status = {
-        isConnected: false,
-        message: '🚨 All Instances Disconnected',
-        subMessage: `0 of ${totalCount} instances connected`,
+        isConnected: true,
+        message: 'All instances connected',
+        subMessage: `${connectedCount} of ${totalCount} instances ready`,
         connectedCount,
-        totalCount
+        totalCount,
+        isLoading: false
       };
-    } else if (connectedCount < totalCount) {
+    } else if (connectedCount > 0) {
       status = {
         isConnected: false,
-        message: '⚠️ Some Instances Disconnected',
+        message: 'Partial connection',
         subMessage: `${connectedCount} of ${totalCount} instances connected`,
         connectedCount,
-        totalCount
+        totalCount,
+        isLoading: false
       };
     } else {
       status = {
-        isConnected: true,
-        message: '✅ All Instances Connected',
-        subMessage: `${connectedCount} of ${totalCount} instances connected`,
+        isConnected: false,
+        message: 'Instances disconnected',
+        subMessage: `0 of ${totalCount} instances connected`,
         connectedCount,
-        totalCount
+        totalCount,
+        isLoading: false
       };
     }
 
     setConnectionStatus(status);
+  }, [selectedInstances, instances]);
 
-    // Auto-pause if all instances disconnect during processing
-    if (connectedCount === 0 && isProcessing && campaignStarted.current) {
-      console.log('🚨 ALL INSTANCES DISCONNECTED - AUTO-PAUSE');
-      handleCampaignControl('pause');
+  // Initialize instances and connection status
+  useEffect(() => {
+    if (!open || !campaign || hasLoadedDetailsRef.current) return;
+
+    setCampaignData(campaign);
+    setSelectedInstances(campaign.instanceIds || []);
+    setIsPaused(campaign.status === 'paused');
+    setIsStopped(campaign.status === 'stopped');
+    setIsProcessing(campaign.status === 'processing');
+    setDelayRange(campaign.delayRange || { start: 1, end: 1 });
+    hasCompletedRef.current = campaign.status === 'completed' || campaign.status === 'stopped';
+
+    if (campaign.status === 'processing' || campaign.status === 'paused') {
+      // Load instances and update connection status
+      fetchInstances(true).then(fetchedInstances => {
+        if (fetchedInstances && campaign.instanceIds?.length > 0) {
+          setTimeout(() => checkInstanceConnectionsImmediate(fetchedInstances), 100);
+        }
+      });
     }
-  }, [selectedInstances, instances, isProcessing]);
+  }, [open, campaign, fetchInstances, checkInstanceConnectionsImmediate]);
+
+  // Poll for instance connection status
+  useEffect(() => {
+    if (!open || selectedInstances.length === 0) return;
+
+    // Initial connection status update
+    checkInstanceConnectionsImmediate();
+
+    // Set up polling
+    instanceCheckIntervalRef.current = setInterval(async () => {
+      const freshInstances = await fetchInstances();
+      if (freshInstances) {
+        checkInstanceConnectionsImmediate(freshInstances);
+      }
+    }, 10000); // Poll every 10 seconds
+
+    return () => {
+      if (instanceCheckIntervalRef.current) {
+        clearInterval(instanceCheckIntervalRef.current);
+        instanceCheckIntervalRef.current = null;
+      }
+    };
+  }, [open, selectedInstances, checkInstanceConnectionsImmediate, fetchInstances]);
 
   const updateRecipientStatuses = useCallback((campaign: Campaign) => {
     if (!campaign.recipients) return [];
@@ -246,7 +297,8 @@ export default function CampaignDetailsDialog({
   
         if (data.status && data.message) {
           const detailedCampaign = data.message;
-          const newDelayRange = detailedCampaign.delayRange || { start: 1, end: 1 };
+  
+          const newDelayRange = campaign?.delayRange || detailedCampaign.delayRange || { start: 1, end: 1 };
   
           setCampaignData((prev) => ({
             ...prev,
@@ -256,13 +308,11 @@ export default function CampaignDetailsDialog({
             failedMessages: detailedCampaign.statistics?.failed || 0,
             notExistMessages: detailedCampaign.statistics?.notExist || 0,
             delayRange: newDelayRange,
-            instanceIds: detailedCampaign.instanceIds || prev?.instanceIds || [],
           }));
   
           setDelayRange(newDelayRange);
-          
-          // Update selected instances only if not already set
-          if (detailedCampaign.instanceIds && selectedInstances.length === 0) {
+  
+          if (detailedCampaign.instanceIds) {
             setSelectedInstances(detailedCampaign.instanceIds);
           }
   
@@ -273,17 +323,12 @@ export default function CampaignDetailsDialog({
           setIsStopped(detailedCampaign.status === 'stopped');
           setIsProcessing(detailedCampaign.status === 'processing');
           
-          if (detailedCampaign.status === 'processing' || detailedCampaign.status === 'paused') {
-            campaignStarted.current = true;
+          if (!hasLoadedDetailsRef.current) {
+            hasLoadedDetailsRef.current = true;
           }
-          
-          hasLoadedDetailsRef.current = true;
   
-          if ((detailedCampaign.status === 'completed' || detailedCampaign.status === 'stopped') && !hasCompletedRef.current) {
+          if ((detailedCampaign.status === 'completed' || detailedCampaign.status === 'stopped') && !hasCompletedRef.current && !autoRefreshTimeoutRef.current) {
             hasCompletedRef.current = true;
-            if (autoRefreshTimeoutRef.current) {
-              clearTimeout(autoRefreshTimeoutRef.current);
-            }
             autoRefreshTimeoutRef.current = setTimeout(() => {
               console.log('Final auto-refresh for completed/stopped campaign');
               loadCampaignDetails(campaignId, true);
@@ -291,245 +336,256 @@ export default function CampaignDetailsDialog({
             }, 2000);
           }
         }
+      } else {
+        console.error('Failed to load campaign details:', response.status);
       }
     } catch (error) {
       console.error('Error loading campaign details:', error);
     } finally {
       setIsLoadingDetails(false);
     }
-  }, [token, updateRecipientStatuses, selectedInstances]);
+  }, [token, updateRecipientStatuses, campaign?.delayRange]);
 
-  // Initialize campaign data when modal opens
   useEffect(() => {
     if (campaign && open && !hasLoadedDetailsRef.current) {
-      console.log('Initializing campaign data:', campaign.name);
-      
       setCampaignData(campaign);
-      setSelectedInstances(campaign.instanceIds || []);
       setIsPaused(campaign.status === 'paused');
       setIsStopped(campaign.status === 'stopped');
       setIsProcessing(campaign.status === 'processing');
       setDelayRange(campaign.delayRange || { start: 1, end: 1 });
-      
       hasCompletedRef.current = campaign.status === 'completed' || campaign.status === 'stopped';
       
-      if (campaign.status === 'processing' || campaign.status === 'paused') {
-        campaignStarted.current = true;
-      }
-      
-      // Load details and fetch instances
       loadCampaignDetails(campaign._id);
       fetchInstances();
     }
   }, [campaign, open, loadCampaignDetails, fetchInstances]);
 
-  // Setup instance monitoring when instances are selected
-  useEffect(() => {
-    if (open && selectedInstances.length > 0) {
-      // Update connection status immediately
-      updateConnectionStatus();
-      
-      // Set up polling interval (reduced frequency)
-      if (instanceCheckIntervalRef.current) {
-        clearInterval(instanceCheckIntervalRef.current);
-      }
-      
-      instanceCheckIntervalRef.current = setInterval(() => {
-        fetchInstances();
-      }, 5000); // Reduced to 5 seconds instead of 1 second
-      
-      return () => {
-        if (instanceCheckIntervalRef.current) {
-          clearInterval(instanceCheckIntervalRef.current);
-          instanceCheckIntervalRef.current = null;
-        }
-      };
-    }
-  }, [open, selectedInstances, updateConnectionStatus, fetchInstances]);
+  const handleCampaignProgress = useCallback(
+    (data: any) => {
+      if (!campaignData || data.campaignId !== campaignData._id) return;
 
-  // Update connection status when instances change
-  useEffect(() => {
-    if (selectedInstances.length > 0) {
-      updateConnectionStatus();
-    }
-  }, [instances, selectedInstances, updateConnectionStatus]);
+      const now = Date.now();
+      if (now - lastProgressUpdateRef.current < 500) return;
+      lastProgressUpdateRef.current = now;
 
-  // Socket event handlers
-  const handleCampaignProgress = useCallback((data: any) => {
-    if (!campaignData || data.campaignId !== campaignData._id) return;
+      console.log('Campaign progress update:', data);
 
-    console.log('Campaign progress update:', data);
-
-    setCampaignData((prev) =>
-      prev
-        ? {
-            ...prev,
-            status: data.status,
-            sentMessages: data.sent || 0,
-            failedMessages: data.failed || 0,
-            notExistMessages: data.notExist || 0,
-            totalMessages: data.total || prev.totalMessages,
-            delayRange: data.delayRange || prev.delayRange,
-            instanceIds: data.instanceIds || prev.instanceIds || [],
-          }
-        : null
-    );
-
-    if (data.lastRecipient && data.lastMessageStatus && campaignData) {
-      const recipientIndex = campaignData.recipients.findIndex(
-        (r) => r.name === data.lastRecipient || r.phone === data.lastRecipient
+      setCampaignData((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: data.status,
+              sentMessages: data.sent || 0,
+              failedMessages: data.failed || 0,
+              notExistMessages: data.notExist || 0,
+              totalMessages: data.total || prev.totalMessages,
+              delayRange: data.delayRange || prev.delayRange,
+            }
+          : null
       );
-      if (recipientIndex !== -1) {
+
+      if (data.lastRecipient && data.lastMessageStatus && campaignData) {
+        const recipientIndex = campaignData.recipients.findIndex(
+          (r) => r.name === data.lastRecipient || r.phone === data.lastRecipient
+        );
+        if (recipientIndex !== -1) {
+          setRecipientStatuses((prev) => {
+            const newStatuses = [...prev];
+            newStatuses[recipientIndex] = data.lastMessageStatus;
+            return newStatuses;
+          });
+        }
+      }
+
+      if (data.status === 'completed') {
+        setIsProcessing(false);
+        setIsPaused(false);
+        setIsStopped(false);
+        isStoppingRef.current = false;
+        isPausingRef.current = false;
+        isResumingRef.current = false;
+        if (!hasCompletedRef.current) {
+          hasCompletedRef.current = true;
+          setTimeout(() => {
+            loadCampaignDetails(data.campaignId, true);
+          }, 1000);
+        }
+      } else if (data.status === 'stopped') {
+        setIsProcessing(false);
+        setIsPaused(false);
+        setIsStopped(true);
+        isStoppingRef.current = false;
+        isPausingRef.current = false;
+        isResumingRef.current = false;
         setRecipientStatuses((prev) => {
           const newStatuses = [...prev];
-          newStatuses[recipientIndex] = data.lastMessageStatus;
-          return newStatuses;
+          return newStatuses.map((status) => (status === 'pending' ? 'stopped' : status));
         });
+      } else if (data.status === 'processing') {
+        setIsProcessing(true);
+        setIsPaused(false);
+        setIsStopped(false);
+        isStoppingRef.current = false;
+        isPausingRef.current = false;
+        isResumingRef.current = false;
+      } else if (data.status === 'paused') {
+        setIsProcessing(false);
+        setIsPaused(true);
+        setIsStopped(false);
+        isStoppingRef.current = false;
+        isPausingRef.current = false;
+        isResumingRef.current = false;
       }
-    }
+    },
+    [campaignData, loadCampaignDetails]
+  );
 
-    // Update campaign state
-    if (data.status === 'completed') {
+  const handleCampaignComplete = useCallback(
+    (data: any) => {
+      if (!campaignData || data.campaignId !== campaignData._id) return;
+
+      console.log('Campaign completed:', data);
+
+      setCampaignData((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: 'completed',
+              sentMessages: data.sent || 0,
+              failedMessages: data.failed || 0,
+              notExistMessages: data.notExist || 0,
+              delayRange: data.delayRange || prev.delayRange,
+            }
+          : null
+      );
+
       setIsProcessing(false);
       setIsPaused(false);
       setIsStopped(false);
-      campaignStarted.current = false;
       isStoppingRef.current = false;
       isPausingRef.current = false;
       isResumingRef.current = false;
-    } else if (data.status === 'stopped') {
-      setIsProcessing(false);
-      setIsPaused(false);
+
+      setRecipientStatuses((prev) => {
+        const newStatuses = [...prev];
+        const sentCount = data.sent || 0;
+        const failedCount = data.failed || 0;
+        const notExistCount = data.notExist || 0;
+
+        let index = 0;
+
+        for (let i = 0; i < sentCount && index < newStatuses.length; i++, index++) {
+          newStatuses[index] = 'sent';
+        }
+
+        for (let i = 0; i < failedCount && index < newStatuses.length; i++, index++) {
+          newStatuses[index] = 'failed';
+        }
+
+        for (let i = 0; i < notExistCount && index < newStatuses.length; i++, index++) {
+          newStatuses[index] = 'not_exist';
+        }
+
+        return newStatuses;
+      });
+
+      if (!hasCompletedRef.current) {
+        hasCompletedRef.current = true;
+        setTimeout(() => {
+          console.log('Final refresh after campaign completion');
+          loadCampaignDetails(data.campaignId, true);
+        }, 1500);
+      }
+    },
+    [campaignData, loadCampaignDetails]
+  );
+
+  const handleCampaignStopped = useCallback(
+    (data: any) => {
+      if (!campaignData || data.campaignId !== campaignData._id) return;
+  
+      console.log('Campaign stopped:', data);
+  
       setIsStopped(true);
-      campaignStarted.current = false;
-      isStoppingRef.current = false;
-      isPausingRef.current = false;
-      isResumingRef.current = false;
-    } else if (data.status === 'processing') {
-      setIsProcessing(true);
-      setIsPaused(false);
-      setIsStopped(false);
-      campaignStarted.current = true;
-      isStoppingRef.current = false;
-      isPausingRef.current = false;
-      isResumingRef.current = false;
-    } else if (data.status === 'paused') {
       setIsProcessing(false);
+      setIsPaused(false);
+      isStoppingRef.current = false;
+      isPausingRef.current = false;
+      isResumingRef.current = false;
+  
+      setCampaignData((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: 'stopped',
+              sentMessages: data.sent || prev.sentMessages,
+              failedMessages: data.failed || prev.failedMessages,
+              notExistMessages: data.notExist || prev.notExistMessages,
+              delayRange: data.delayRange || prev.delayRange,
+            }
+          : null
+      );
+  
+      setRecipientStatuses((prev) => {
+        const newStatuses = [...prev];
+        return newStatuses.map((status) => (status === 'pending' ? 'stopped' : status));
+      });
+    },
+    [campaignData]
+  );
+  
+  const handleCampaignPaused = useCallback(
+    (data: any) => {
+      if (!campaignData || data.campaignId !== campaignData._id) return;
+
+      console.log('Campaign paused:', data);
+
       setIsPaused(true);
+      setIsProcessing(false);
       setIsStopped(false);
       isStoppingRef.current = false;
       isPausingRef.current = false;
       isResumingRef.current = false;
-    }
-  }, [campaignData]);
 
-  const handleCampaignComplete = useCallback((data: any) => {
-    if (!campaignData || data.campaignId !== campaignData._id) return;
+      setCampaignData((prev) => 
+        prev 
+          ? { 
+              ...prev, 
+              status: 'paused',
+              delayRange: data.delayRange || prev.delayRange,
+            } 
+          : null
+      );
+    },
+    [campaignData]
+  );
 
-    console.log('Campaign completed:', data);
+  const handleCampaignResumed = useCallback(
+    (data: any) => {
+      if (!campaignData || data.campaignId !== campaignData._id) return;
 
-    setCampaignData((prev) =>
-      prev
-        ? {
-            ...prev,
-            status: 'completed',
-            sentMessages: data.sent || 0,
-            failedMessages: data.failed || 0,
-            notExistMessages: data.notExist || 0,
-          }
-        : null
-    );
+      console.log('Campaign resumed:', data);
 
-    setIsProcessing(false);
-    setIsPaused(false);
-    setIsStopped(false);
-    campaignStarted.current = false;
-    isStoppingRef.current = false;
-    isPausingRef.current = false;
-    isResumingRef.current = false;
-  }, [campaignData]);
+      setIsPaused(false);
+      setIsProcessing(true);
+      setIsStopped(false);
+      isStoppingRef.current = false;
+      isPausingRef.current = false;
+      isResumingRef.current = false;
 
-  const handleCampaignStopped = useCallback((data: any) => {
-    if (!campaignData || data.campaignId !== campaignData._id) return;
+      setCampaignData((prev) => 
+        prev 
+          ? { 
+              ...prev, 
+              status: 'processing',
+              delayRange: data.delayRange || prev.delayRange,
+            } 
+          : null
+      );
+    },
+    [campaignData]
+  );
 
-    console.log('Campaign stopped:', data);
-
-    setIsStopped(true);
-    setIsProcessing(false);
-    setIsPaused(false);
-    campaignStarted.current = false;
-    isStoppingRef.current = false;
-    isPausingRef.current = false;
-    isResumingRef.current = false;
-
-    setCampaignData((prev) =>
-      prev
-        ? {
-            ...prev,
-            status: 'stopped',
-            sentMessages: data.sent || prev.sentMessages,
-            failedMessages: data.failed || prev.failedMessages,
-            notExistMessages: data.notExist || prev.notExistMessages,
-          }
-        : null
-    );
-
-    setRecipientStatuses((prev) => {
-      const newStatuses = [...prev];
-      return newStatuses.map((status) => (status === 'pending' ? 'stopped' : status));
-    });
-  }, [campaignData]);
-
-  const handleCampaignPaused = useCallback((data: any) => {
-    if (!campaignData || data.campaignId !== campaignData._id) return;
-
-    console.log('Campaign paused:', data);
-
-    setIsPaused(true);
-    setIsProcessing(false);
-    setIsStopped(false);
-    isStoppingRef.current = false;
-    isPausingRef.current = false;
-    isResumingRef.current = false;
-
-    setCampaignData((prev) => 
-      prev 
-        ? { 
-            ...prev, 
-            status: 'paused',
-            delayRange: data.delayRange || prev.delayRange,
-            instanceIds: data.instanceIds || prev.instanceIds || [],
-          } 
-        : null
-    );
-  }, [campaignData]);
-
-  const handleCampaignResumed = useCallback((data: any) => {
-    if (!campaignData || data.campaignId !== campaignData._id) return;
-
-    console.log('Campaign resumed:', data);
-
-    setIsPaused(false);
-    setIsProcessing(true);
-    setIsStopped(false);
-    campaignStarted.current = true;
-    isStoppingRef.current = false;
-    isPausingRef.current = false;
-    isResumingRef.current = false;
-
-    setCampaignData((prev) => 
-      prev 
-        ? { 
-            ...prev, 
-            status: 'processing',
-            delayRange: data.delayRange || prev.delayRange,
-            instanceIds: data.instanceIds || prev.instanceIds || [],
-          } 
-        : null
-    );
-  }, [campaignData]);
-
-  // Setup socket listeners
   useEffect(() => {
     if (!isConnected || !campaignData || socketListenersSetupRef.current) return;
 
@@ -560,7 +616,7 @@ export default function CampaignDetailsDialog({
     hasLoadedDetailsRef.current = false;
     try {
       await loadCampaignDetails(campaignData._id, true);
-      await fetchInstances();
+      await fetchInstances(true);
     } catch (error) {
       console.error('Error refreshing campaign details:', error);
     } finally {
@@ -568,83 +624,107 @@ export default function CampaignDetailsDialog({
     }
   };
 
-  const handleCampaignControl = useCallback(async (action: 'stop' | 'pause' | 'resume') => {
-    if (!campaignData) return;
+  const handleCampaignControl = useCallback(
+    async (action: 'stop' | 'pause' | 'resume') => {
+      if (!campaignData) return;
 
-    if (action === 'stop' && isStoppingRef.current) return;
-    if (action === 'pause' && isPausingRef.current) return;
-    if (action === 'resume' && isResumingRef.current) return;
+      if (action === 'stop' && isStoppingRef.current) return;
+      if (action === 'pause' && isPausingRef.current) return;
+      if (action === 'resume' && isResumingRef.current) return;
 
-    if (action === 'resume' && connectionStatus.connectedCount === 0) {
-      console.log('Cannot resume: No instances are connected');
-      return;
-    }
+      if (action === 'resume' && connectionStatus.connectedCount === 0) {
+        console.log('Cannot resume: No instances are connected');
+        return;
+      }
 
-    if (action === 'stop') {
-      isStoppingRef.current = true;
-    } else if (action === 'pause') {
-      isPausingRef.current = true;
-    } else {
-      isResumingRef.current = true;
-    }
-
-    // Optimistic UI updates
-    if (action === 'stop') {
-      setIsProcessing(false);
-      setIsPaused(false);
-      setIsStopped(true);
-      setCampaignData((prev) => (prev ? { ...prev, status: 'stopped' } : null));
-    } else if (action === 'pause') {
-      setIsProcessing(false);
-      setIsPaused(true);
-      setIsStopped(false);
-      setCampaignData((prev) => (prev ? { ...prev, status: 'paused' } : null));
-    } else {
-      setIsProcessing(true);
-      setIsPaused(false);
-      setIsStopped(false);
-      campaignStarted.current = true;
-      setCampaignData((prev) => (prev ? { ...prev, status: 'processing' } : null));
-    }
-
-    try {
-      const authToken = getToken();
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-
-      const payload = {
-        campaignId: campaignData._id,
-        action,
-        ...(action === 'resume' && { delayRange }),
-      };
-
-      console.log('Sending campaign control payload:', payload);
-
-      const response = await fetch('https://whatsapp.recuperafly.com/api/template/campaign/control', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-      const result = await response.json();
-
-      if (result.status) {
-        console.log(`Campaign ${action} signal sent successfully`);
-        if (action === 'resume') {
-          setCampaignData((prev) => 
-            prev 
-              ? { ...prev, delayRange } 
-              : null
-          );
-        }
+      if (action === 'stop') {
+        isStoppingRef.current = true;
+      } else if (action === 'pause') {
+        isPausingRef.current = true;
       } else {
-        console.error(`Campaign ${action} failed:`, result.message);
-        // Revert optimistic updates on failure
+        isResumingRef.current = true;
+      }
+
+      if (action === 'stop') {
+        setIsProcessing(false);
+        setIsPaused(false);
+        setIsStopped(true);
+        setCampaignData((prev) => (prev ? { ...prev, status: 'stopped' } : null));
+        setRecipientStatuses((prev) => {
+          const newStatuses = [...prev];
+          return newStatuses.map((status) => (status === 'pending' ? 'stopped' : status));
+        });
+      } else if (action === 'pause') {
+        setIsProcessing(false);
+        setIsPaused(true);
+        setIsStopped(false);
+        setCampaignData((prev) => (prev ? { ...prev, status: 'paused' } : null));
+      } else {
+        setIsProcessing(true);
+        setIsPaused(false);
+        setIsStopped(false);
+        setCampaignData((prev) => (prev ? { ...prev, status: 'processing' } : null));
+      }
+
+      try {
+        const authToken = getToken();
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+        const payload = {
+          campaignId: campaignData._id,
+          action,
+          ...(action === 'resume' && { delayRange }),
+        };
+
+        console.log('Sending campaign control payload:', payload);
+
+        const response = await fetch('https://whatsapp.recuperafly.com/api/template/campaign/control', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${authToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+        const result = await response.json();
+
+        if (result.status) {
+          console.log(`Campaign ${action} signal sent successfully`);
+          if (action === 'resume') {
+            setCampaignData((prev) => 
+              prev 
+                ? { ...prev, delayRange } 
+                : null
+            );
+          }
+        } else {
+          console.error(`Campaign ${action} failed:`, result.message);
+          if (action === 'stop') {
+            setIsProcessing(true);
+            setIsPaused(false);
+            setIsStopped(false);
+            isStoppingRef.current = false;
+            setCampaignData((prev) => (prev ? { ...prev, status: 'processing' } : null));
+          } else if (action === 'pause') {
+            setIsProcessing(true);
+            setIsPaused(false);
+            setIsStopped(false);
+            isPausingRef.current = false;
+            setCampaignData((prev) => (prev ? { ...prev, status: 'processing' } : null));
+          } else {
+            setIsProcessing(false);
+            setIsPaused(true);
+            setIsStopped(false);
+            isResumingRef.current = false;
+            setCampaignData((prev) => (prev ? { ...prev, status: 'paused' } : null));
+          }
+        }
+      } catch (error) {
+        console.error(`Error ${action}ing campaign:`, error);
         if (action === 'stop') {
           setIsProcessing(true);
           setIsPaused(false);
@@ -662,50 +742,22 @@ export default function CampaignDetailsDialog({
           setIsPaused(true);
           setIsStopped(false);
           isResumingRef.current = false;
-          campaignStarted.current = false;
           setCampaignData((prev) => (prev ? { ...prev, status: 'paused' } : null));
         }
       }
-    } catch (error) {
-      console.error(`Error ${action}ing campaign:`, error);
-      // Revert optimistic updates on error
-      if (action === 'stop') {
-        setIsProcessing(true);
-        setIsPaused(false);
-        setIsStopped(false);
-        isStoppingRef.current = false;
-        setCampaignData((prev) => (prev ? { ...prev, status: 'processing' } : null));
-      } else if (action === 'pause') {
-        setIsProcessing(true);
-        setIsPaused(false);
-        setIsStopped(false);
-        isPausingRef.current = false;
-        setCampaignData((prev) => (prev ? { ...prev, status: 'processing' } : null));
-      } else {
-        setIsProcessing(false);
-        setIsPaused(true);
-        setIsStopped(false);
-        isResumingRef.current = false;
-        campaignStarted.current = false;
-        setCampaignData((prev) => (prev ? { ...prev, status: 'paused' } : null));
-      }
-    }
-  }, [campaignData, getToken, connectionStatus.connectedCount, delayRange]);
+    },
+    [campaignData, getToken, connectionStatus, delayRange]
+  );
 
   const handleStopCampaign = useCallback(() => handleCampaignControl('stop'), [handleCampaignControl]);
   const handlePauseCampaign = useCallback(() => handleCampaignControl('pause'), [handleCampaignControl]);
   const handleResumeCampaign = useCallback(() => handleCampaignControl('resume'), [handleCampaignControl]);
 
-  // Reset state when modal closes
   useEffect(() => {
     if (!open) {
-      console.log('Modal closed, resetting state');
       hasLoadedDetailsRef.current = false;
       hasCompletedRef.current = false;
       socketListenersSetupRef.current = false;
-      campaignStarted.current = false;
-      lastFetchTime.current = 0;
-      
       setCurrentPage(1);
       setRecipientStatuses([]);
       setIsRefreshing(false);
@@ -714,16 +766,16 @@ export default function CampaignDetailsDialog({
       setIsProcessing(false);
       setIsLoadingDetails(false);
       setStatusFilter('all');
-      setInstances([]);
       setSelectedInstances([]);
+      setDelayRange({ start: 1, end: 1 });
       setConnectionStatus({
         isConnected: false,
-        message: 'Checking connection...',
-        subMessage: '',
+        message: 'Initializing...',
+        subMessage: 'Setting up connection monitoring',
         connectedCount: 0,
-        totalCount: 0
+        totalCount: 0,
+        isLoading: true
       });
-      setDelayRange({ start: 1, end: 1 });
       
       isStoppingRef.current = false;
       isPausingRef.current = false;
@@ -741,7 +793,6 @@ export default function CampaignDetailsDialog({
     }
   }, [open]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (autoRefreshTimeoutRef.current) {
@@ -869,7 +920,7 @@ export default function CampaignDetailsDialog({
                   >
                     <Play className="h-4 w-4 mr-2" />
                     {isResumingRef.current ? 'Resuming...' : 
-                     !canResume && connectionStatus.connectedCount === 0 ? 'Waiting for Connection' : 'Resume'}
+                     !canResume ? 'Waiting for Connection' : 'Resume'}
                   </Button>
                   <Button
                     onClick={handleStopCampaign}
@@ -904,20 +955,39 @@ export default function CampaignDetailsDialog({
         </DialogHeader>
 
         <div className="space-y-6 p-6">
-          {/* Connection Status */}
-          {campaignStarted.current && selectedInstances.length > 0 && (
-            <div className={`p-4 rounded-lg border ${connectionStatus.isConnected ? 'bg-green-500/10 border-green-500/20' : 'bg-red-500/10 border-red-500/20'}`}>
+          {(isProcessing || isPaused) && selectedInstances.length > 0 && (
+            <div className={`p-4 rounded-lg border ${
+              connectionStatus.isConnected 
+                ? 'bg-green-500/10 border-green-500/20' 
+                : connectionStatus.isLoading 
+                  ? 'bg-blue-500/10 border-blue-500/20'
+                  : 'bg-red-500/10 border-red-500/20'
+            }`}>
               <div className="flex items-center gap-3">
-                {connectionStatus.isConnected ? (
+                {connectionStatus.isLoading ? (
+                  <Loader2 className="h-5 w-5 text-blue-400 animate-spin" />
+                ) : connectionStatus.isConnected ? (
                   <Wifi className="h-5 w-5 text-green-400" />
                 ) : (
                   <WifiOff className="h-5 w-5 text-red-400" />
                 )}
                 <div>
-                  <p className={`text-sm font-medium ${connectionStatus.isConnected ? 'text-green-400' : 'text-red-400'}`}>
+                  <p className={`text-sm font-medium ${
+                    connectionStatus.isLoading 
+                      ? 'text-blue-400' 
+                      : connectionStatus.isConnected 
+                        ? 'text-green-400' 
+                        : 'text-red-400'
+                  }`}>
                     {connectionStatus.message}
                   </p>
-                  <p className={`text-xs ${connectionStatus.isConnected ? 'text-green-300' : 'text-red-300'}`}>
+                  <p className={`text-xs ${
+                    connectionStatus.isLoading 
+                      ? 'text-blue-300' 
+                      : connectionStatus.isConnected 
+                        ? 'text-green-300' 
+                        : 'text-red-300'
+                  }`}>
                     {connectionStatus.subMessage}
                   </p>
                 </div>
@@ -925,7 +995,6 @@ export default function CampaignDetailsDialog({
             </div>
           )}
 
-          {/* Campaign Stopped Banner */}
           {isStopped && (
             <div className="p-4 rounded-lg border bg-red-500/10 border-red-500/20">
               <div className="flex items-center gap-3">
@@ -942,7 +1011,6 @@ export default function CampaignDetailsDialog({
             </div>
           )}
 
-          {/* Delay Configuration */}
           {isPaused && (
             <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-6">
               <h4 className="text-lg font-semibold text-white mb-4">Adjust Delay Configuration</h4>
@@ -979,10 +1047,8 @@ export default function CampaignDetailsDialog({
               <span className="ml-2 text-zinc-400">Loading campaign details...</span>
             </div>
           )}
-
           {!isLoadingDetails && (
             <>
-              {/* Statistics Cards */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4">
                   <div className="text-center">
@@ -1010,7 +1076,6 @@ export default function CampaignDetailsDialog({
                 </div>
               </div>
 
-              {/* Recipients Table */}
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-lg font-semibold text-zinc-200">Recipients ({campaignData.recipients?.length || 0})</h3>
@@ -1098,7 +1163,6 @@ export default function CampaignDetailsDialog({
                   </Table>
                 </div>
 
-                {/* Pagination */}
                 {totalPages > 1 && (
                   <div className="flex flex-col sm:flex-row justify-between items-center mt-6 pt-4 border-t border-zinc-700 gap-4">
                     <div className="flex items-center gap-3">

@@ -638,11 +638,11 @@ export default function MessagingPage() {
                 campaigns={campaigns}
                 isDeleting={isDeleting}
                 onViewDetails={(campaign) => {
-                  setSelectedCampaign(campaign);
+                  // setSelectedCampaign(campaign);
                   setShowCampaignDetails(true);
                 }}
                 onDelete={handleDeleteCampaign}
-                onCampaignUpdate={handleCampaignUpdate}
+                // onCampaignUpdate={handleCampaignUpdate}
               />
             )}
           </CardContent>

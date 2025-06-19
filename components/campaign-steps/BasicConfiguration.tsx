@@ -59,10 +59,10 @@ export default function BasicConfiguration({
   const isAllSelected = selectedInstances.length === connectedInstances.length && connectedInstances.length > 0;
 
   const handleInstanceSelection = (instanceId: string) => {
-    setTempSelectedInstances(
-      tempSelectedInstances.includes(instanceId)
-        ? tempSelectedInstances.filter(id => id !== instanceId)
-        : [...tempSelectedInstances, instanceId]
+    setTempSelectedInstances(prev => 
+      prev.includes(instanceId)
+        ? prev.filter(id => id !== instanceId)
+        : [...prev, instanceId]
     );
   };
 
@@ -74,6 +74,16 @@ export default function BasicConfiguration({
 
   const handleDeselectAll = () => {
     setSelectedInstances([]);
+    setTempSelectedInstances([]);
+  };
+
+  // Dialog specific select/deselect all functions
+  const handleDialogSelectAll = () => {
+    const connectedInstanceIds = connectedInstances.map(instance => instance._id);
+    setTempSelectedInstances(connectedInstanceIds);
+  };
+
+  const handleDialogDeselectAll = () => {
     setTempSelectedInstances([]);
   };
 
@@ -163,10 +173,22 @@ export default function BasicConfiguration({
   const handleDialogClose = (confirm: boolean) => {
     if (confirm) {
       setSelectedInstances(tempSelectedInstances);
+      // Close the dropdown when OK is clicked
+      setIsDropdownOpen(false);
+      setSearchTerm('');
+    } else {
+      setTempSelectedInstances([...selectedInstances]); // Reset to original selection
     }
     setDialogSearchTerm('');
     setDialogCurrentPage(1);
     setIsDialogOpen(false);
+  };
+
+  // Function to remove instance from selected list
+  const handleRemoveInstance = (instanceId: string) => {
+    const updatedSelection = selectedInstances.filter(id => id !== instanceId);
+    setSelectedInstances(updatedSelection);
+    setTempSelectedInstances(updatedSelection);
   };
 
   return (
@@ -231,7 +253,7 @@ export default function BasicConfiguration({
             <div className="relative">
               <div
                 onClick={handleDropdownToggle}
-                className="flex items-center justify-between w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md cursor-pointer hover:border-zinc-600 transition wait_for_termination-colors"
+                className="flex items-center justify-between w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-md cursor-pointer hover:border-zinc-600 transition-colors"
               >
                 <span className="text-zinc-200 truncate">
                   {getDisplayText()}
@@ -261,7 +283,11 @@ export default function BasicConfiguration({
                           key={instance._id}
                           onClick={() => {
                             handleInstanceSelection(instance._id);
-                            setSelectedInstances(tempSelectedInstances);
+                            setSelectedInstances(
+                              tempSelectedInstances.includes(instance._id)
+                                ? tempSelectedInstances.filter(id => id !== instance._id)
+                                : [...tempSelectedInstances, instance._id]
+                            );
                           }}
                           className="flex items-center gap-3 p-3 hover:bg-zinc-700 cursor-pointer transition-colors"
                         >
@@ -321,6 +347,41 @@ export default function BasicConfiguration({
                           <DialogHeader>
                             <DialogTitle className="text-zinc-200">All Instances</DialogTitle>
                           </DialogHeader>
+                          
+                          {/* Dialog Select/Deselect All Buttons */}
+                          <div className="flex justify-between items-center mb-4">
+                            <div className="flex gap-3">
+                              <Button
+                                onClick={handleDialogSelectAll}
+                                variant="outline"
+                                size="sm"
+                                disabled={tempSelectedInstances.length === connectedInstances.length}
+                                className={`${
+                                  tempSelectedInstances.length === connectedInstances.length
+                                    ? 'bg-zinc-700 border-zinc-600 text-zinc-500 cursor-not-allowed' 
+                                    : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
+                                }`}
+                              >
+                                <UserCheck className="h-4 w-4 mr-2" />
+                                Select All
+                              </Button>
+                              <Button
+                                onClick={handleDialogDeselectAll}
+                                variant="outline"
+                                size="sm"
+                                disabled={tempSelectedInstances.length === 0}
+                                className={`${
+                                  tempSelectedInstances.length === 0
+                                    ? 'bg-zinc-700 border-zinc-600 text-zinc-500 cursor-not-allowed'
+                                    : 'bg-red-500/10 border-red-500/30 text-red-400 hover:bg-red-500/20'
+                                }`}
+                              >
+                                <UserX className="h-4 w-4 mr-2" />
+                                Deselect All
+                              </Button>
+                            </div>
+                          </div>
+
                           <div className="p-3 border-b border-zinc-700">
                             <Input
                               placeholder="Search instances..."
@@ -468,8 +529,7 @@ export default function BasicConfiguration({
                           className="ml-2 h-4 w-4 p-0 hover:bg-red-500/20"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleInstanceSelection(instanceId);
-                            setSelectedInstances(tempSelectedInstances);
+                            handleRemoveInstance(instanceId);
                           }}
                         >
                           <X className="h-3 w-3 text-red-400" />
@@ -517,10 +577,7 @@ export default function BasicConfiguration({
                                       variant="ghost"
                                       size="sm"
                                       className="h-6 w-6 p-0 hover:bg-red-500/20"
-                                      onClick={() => {
-                                        handleInstanceSelection(instance._id);
-                                        setSelectedInstances(tempSelectedInstances);
-                                      }}
+                                      onClick={() => handleRemoveInstance(instance._id)}
                                     >
                                       <X className="h-4 w-4 text-red-400" />
                                     </Button>

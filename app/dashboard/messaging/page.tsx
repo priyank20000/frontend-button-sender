@@ -53,7 +53,7 @@ interface Campaign {
   };
   instances: Instance[];
   recipients: Recipient[];
-  status: 'completed' | 'failed' | 'processing' | 'paused';
+  status: 'completed' | 'failed' | 'processing' | 'paused' | 'stopped';
   totalMessages: number;
   sentMessages: number;
   failedMessages: number;
@@ -638,11 +638,11 @@ export default function MessagingPage() {
                 campaigns={campaigns}
                 isDeleting={isDeleting}
                 onViewDetails={(campaign) => {
-                  // setSelectedCampaign(campaign);
+                  setSelectedCampaign(campaign);
                   setShowCampaignDetails(true);
                 }}
                 onDelete={handleDeleteCampaign}
-                // onCampaignUpdate={handleCampaignUpdate}
+                onCampaignUpdate={handleCampaignUpdate}
               />
             )}
           </CardContent>

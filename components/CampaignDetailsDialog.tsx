@@ -77,9 +77,13 @@ export default function CampaignDetailsDialog({
     isLoading: true
   });
 
-  const isStoppingRef = useRef(false);
-  const isPausingRef = useRef(false);
-  const isResumingRef = useRef(false);
+  // Control states with proper state management
+  const [controlStates, setControlStates] = useState({
+    isStopping: false,
+    isPausing: false,
+    isResuming: false
+  });
+
   const lastProgressUpdateRef = useRef<number>(0);
   const hasLoadedDetailsRef = useRef(false);
   const autoRefreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -87,6 +91,8 @@ export default function CampaignDetailsDialog({
   const socketListenersSetupRef = useRef(false);
   const instanceCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastInstanceFetchRef = useRef(0);
+  const instanceCacheRef = useRef<{ data: any[], timestamp: number } | null>(null);
+  const isFetchingInstancesRef = useRef(false);
 
   const getToken = useCallback((): string | null => {
     if (typeof window === 'undefined') return null;
@@ -105,53 +111,80 @@ export default function CampaignDetailsDialog({
     onError: (error) => console.error('Socket error:', error),
   });
 
-  // Fetch instances logic from the first code
+  // Optimized instance fetching with caching and debouncing
   const fetchInstances = useCallback(async (force = false) => {
+    if (isFetchingInstancesRef.current) return;
+    isFetchingInstancesRef.current = true;
     const now = Date.now();
-    if (!force && now - lastInstanceFetchRef.current < 3000) return;
+    const CACHE_DURATION = 5000; // 5 seconds cache
+    const MIN_FETCH_INTERVAL = 2000; // Minimum 2 seconds between fetches
+
+    // Check cache first
+    if (!force && instanceCacheRef.current && 
+        (now - instanceCacheRef.current.timestamp) < CACHE_DURATION) {
+      setInstances(instanceCacheRef.current.data);
+      isFetchingInstancesRef.current = false;
+      return instanceCacheRef.current.data;
+    }
+
+    // Debounce rapid requests
+    if (!force && now - lastInstanceFetchRef.current < MIN_FETCH_INTERVAL) {
+      isFetchingInstancesRef.current = false;
+      return instances;
+    }
+    
     lastInstanceFetchRef.current = now;
 
     const authToken = getToken();
-    if (!authToken) return;
-
-    let allInstances: any[] = [];
-    let page = 0;
-    const limit = 400;
-    let hasMore = true;
+    if (!authToken) return [];
 
     try {
-        while (hasMore) {
-            const response = await fetch('https://whatsapp.recuperafly.com/api/instance/all', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${authToken}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ page, limit, instance_status: 'connected' }),
-            });
+      // Fetch with timeout and abort controller
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-            if (response.status === 401) return [];
+      const response = await fetch('https://whatsapp.recuperafly.com/api/instance/all', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          page: 0, 
+          limit: 100, // Fetch more at once to reduce requests
+          instance_status: 'connected' 
+        }),
+        signal: controller.signal
+      });
 
-            const data = await response.json();
-            if (data.status && data.instances) {
-                allInstances = [...allInstances, ...data.instances];
-                // Check if there are more pages (e.g., if the response includes fewer instances than the limit)
-                hasMore = data.instances.length === limit;
-                page += 1;
-            } else {
-                hasMore = false;
-            }
-        }
+      clearTimeout(timeoutId);
 
-        setInstances(allInstances);
-        return allInstances;
+      if (response.status === 401) return [];
+
+      const data = await response.json();
+      if (data.status && data.instances) {
+        const fetchedInstances = data.instances;
+        
+        // Update cache
+        instanceCacheRef.current = {
+          data: fetchedInstances,
+          timestamp: now
+        };
+        
+        setInstances(fetchedInstances);
+        isFetchingInstancesRef.current = false;
+        return fetchedInstances;
+      }
     } catch (error) {
+      if ((error as any).name !== 'AbortError') {
         console.error('Error fetching instances:', error);
-        return [];
+      }
     }
-}, [getToken]);
+    isFetchingInstancesRef.current = false;
+    return [];
+  }, [getToken, instances]);
 
-  // Update connection status logic from the first code
+  // Optimized connection status checking
   const checkInstanceConnectionsImmediate = useCallback((instancesData: any[] = instances) => {
     if (selectedInstances.length === 0) {
       setConnectionStatus({
@@ -207,7 +240,7 @@ export default function CampaignDetailsDialog({
     setConnectionStatus(status);
   }, [selectedInstances, instances]);
 
-  // Initialize instances and connection status
+  // Initialize campaign data
   useEffect(() => {
     if (!open || !campaign || hasLoadedDetailsRef.current) return;
 
@@ -220,29 +253,27 @@ export default function CampaignDetailsDialog({
     hasCompletedRef.current = campaign.status === 'completed' || campaign.status === 'stopped';
 
     if (campaign.status === 'processing' || campaign.status === 'paused') {
-      // Load instances and update connection status
       fetchInstances(true).then(fetchedInstances => {
-        if (fetchedInstances && campaign.instanceIds?.length > 0) {
+        if (fetchedInstances && (campaign.instanceIds?.length ?? 0) > 0) {
           setTimeout(() => checkInstanceConnectionsImmediate(fetchedInstances), 100);
         }
       });
     }
   }, [open, campaign, fetchInstances, checkInstanceConnectionsImmediate]);
 
-  // Poll for instance connection status
+  // Optimized instance monitoring with reduced frequency
   useEffect(() => {
     if (!open || selectedInstances.length === 0) return;
 
-    // Initial connection status update
     checkInstanceConnectionsImmediate();
 
-    // Set up polling
+    // Reduced polling frequency for better performance
     instanceCheckIntervalRef.current = setInterval(async () => {
       const freshInstances = await fetchInstances();
       if (freshInstances) {
         checkInstanceConnectionsImmediate(freshInstances);
       }
-    }, 10000); // Poll every 10 seconds
+    }, 15000); // Increased to 15 seconds
 
     return () => {
       if (instanceCheckIntervalRef.current) {
@@ -296,6 +327,9 @@ export default function CampaignDetailsDialog({
   
     setIsLoadingDetails(true);
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
       const response = await fetch(`https://whatsapp.recuperafly.com/api/template/message/get`, {
         method: 'POST',
         headers: {
@@ -303,11 +337,13 @@ export default function CampaignDetailsDialog({
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ id: campaignId }),
+        signal: controller.signal
       });
+
+      clearTimeout(timeoutId);
   
       if (response.ok) {
         const data = await response.json();
-        console.log('Detailed campaign data:', data);
   
         if (data.status && data.message) {
           const detailedCampaign = data.message;
@@ -354,7 +390,9 @@ export default function CampaignDetailsDialog({
         console.error('Failed to load campaign details:', response.status);
       }
     } catch (error) {
-      console.error('Error loading campaign details:', error);
+      if ((error as any).name !== 'AbortError') {
+        console.error('Error loading campaign details:', error);
+      }
     } finally {
       setIsLoadingDetails(false);
     }
@@ -370,10 +408,11 @@ export default function CampaignDetailsDialog({
       hasCompletedRef.current = campaign.status === 'completed' || campaign.status === 'stopped';
       
       loadCampaignDetails(campaign._id);
-      fetchInstances();
+      fetchInstances(true);
     }
   }, [campaign, open, loadCampaignDetails, fetchInstances]);
 
+  // Enhanced socket event handlers with proper state management
   const handleCampaignProgress = useCallback(
     (data: any) => {
       if (!campaignData || data.campaignId !== campaignData._id) return;
@@ -411,13 +450,12 @@ export default function CampaignDetailsDialog({
         }
       }
 
+      // Update states based on status
       if (data.status === 'completed') {
         setIsProcessing(false);
         setIsPaused(false);
         setIsStopped(false);
-        isStoppingRef.current = false;
-        isPausingRef.current = false;
-        isResumingRef.current = false;
+        setControlStates({ isStopping: false, isPausing: false, isResuming: false });
         if (!hasCompletedRef.current) {
           hasCompletedRef.current = true;
           setTimeout(() => {
@@ -428,9 +466,7 @@ export default function CampaignDetailsDialog({
         setIsProcessing(false);
         setIsPaused(false);
         setIsStopped(true);
-        isStoppingRef.current = false;
-        isPausingRef.current = false;
-        isResumingRef.current = false;
+        setControlStates({ isStopping: false, isPausing: false, isResuming: false });
         setRecipientStatuses((prev) => {
           const newStatuses = [...prev];
           return newStatuses.map((status) => (status === 'pending' ? 'stopped' : status));
@@ -439,16 +475,12 @@ export default function CampaignDetailsDialog({
         setIsProcessing(true);
         setIsPaused(false);
         setIsStopped(false);
-        isStoppingRef.current = false;
-        isPausingRef.current = false;
-        isResumingRef.current = false;
+        setControlStates({ isStopping: false, isPausing: false, isResuming: false });
       } else if (data.status === 'paused') {
         setIsProcessing(false);
         setIsPaused(true);
         setIsStopped(false);
-        isStoppingRef.current = false;
-        isPausingRef.current = false;
-        isResumingRef.current = false;
+        setControlStates({ isStopping: false, isPausing: false, isResuming: false });
       }
     },
     [campaignData, loadCampaignDetails]
@@ -476,9 +508,7 @@ export default function CampaignDetailsDialog({
       setIsProcessing(false);
       setIsPaused(false);
       setIsStopped(false);
-      isStoppingRef.current = false;
-      isPausingRef.current = false;
-      isResumingRef.current = false;
+      setControlStates({ isStopping: false, isPausing: false, isResuming: false });
 
       setRecipientStatuses((prev) => {
         const newStatuses = [...prev];
@@ -523,9 +553,7 @@ export default function CampaignDetailsDialog({
       setIsStopped(true);
       setIsProcessing(false);
       setIsPaused(false);
-      isStoppingRef.current = false;
-      isPausingRef.current = false;
-      isResumingRef.current = false;
+      setControlStates({ isStopping: false, isPausing: false, isResuming: false });
   
       setCampaignData((prev) =>
         prev
@@ -544,8 +572,11 @@ export default function CampaignDetailsDialog({
         const newStatuses = [...prev];
         return newStatuses.map((status) => (status === 'pending' ? 'stopped' : status));
       });
+
+      // Refresh campaign details immediately after stop, but do NOT close dialog
+      loadCampaignDetails(data.campaignId, true);
     },
-    [campaignData]
+    [campaignData, loadCampaignDetails]
   );
   
   const handleCampaignPaused = useCallback(
@@ -557,9 +588,7 @@ export default function CampaignDetailsDialog({
       setIsPaused(true);
       setIsProcessing(false);
       setIsStopped(false);
-      isStoppingRef.current = false;
-      isPausingRef.current = false;
-      isResumingRef.current = false;
+      setControlStates({ isStopping: false, isPausing: false, isResuming: false });
 
       setCampaignData((prev) => 
         prev 
@@ -583,9 +612,7 @@ export default function CampaignDetailsDialog({
       setIsPaused(false);
       setIsProcessing(true);
       setIsStopped(false);
-      isStoppingRef.current = false;
-      isPausingRef.current = false;
-      isResumingRef.current = false;
+      setControlStates({ isStopping: false, isPausing: false, isResuming: false });
 
       setCampaignData((prev) => 
         prev 
@@ -638,36 +665,37 @@ export default function CampaignDetailsDialog({
     }
   };
 
+  // Enhanced campaign control with proper state management
   const handleCampaignControl = useCallback(
     async (action: 'stop' | 'pause' | 'resume') => {
       if (!campaignData) return;
 
-      if (action === 'stop' && isStoppingRef.current) return;
-      if (action === 'pause' && isPausingRef.current) return;
-      if (action === 'resume' && isResumingRef.current) return;
+      // Prevent multiple simultaneous control actions
+      if (controlStates.isStopping || controlStates.isPausing || controlStates.isResuming) {
+        return;
+      }
 
+      // For resume, check if instances are connected
       if (action === 'resume' && connectionStatus.connectedCount === 0) {
         console.log('Cannot resume: No instances are connected');
         return;
       }
 
-      if (action === 'stop') {
-        isStoppingRef.current = true;
-      } else if (action === 'pause') {
-        isPausingRef.current = true;
-      } else {
-        isResumingRef.current = true;
-      }
+      // Set control state
+      setControlStates(prev => ({
+        ...prev,
+        isStopping: action === 'stop',
+        isPausing: action === 'pause',
+        isResuming: action === 'resume'
+      }));
 
+      // Optimistically update UI
       if (action === 'stop') {
         setIsProcessing(false);
         setIsPaused(false);
         setIsStopped(true);
         setCampaignData((prev) => (prev ? { ...prev, status: 'stopped' } : null));
-        setRecipientStatuses((prev) => {
-          const newStatuses = [...prev];
-          return newStatuses.map((status) => (status === 'pending' ? 'stopped' : status));
-        });
+        setRecipientStatuses((prev) => prev.map((status) => (status === 'pending' ? 'stopped' : status)));
       } else if (action === 'pause') {
         setIsProcessing(false);
         setIsPaused(true);
@@ -717,47 +745,46 @@ export default function CampaignDetailsDialog({
           }
         } else {
           console.error(`Campaign ${action} failed:`, result.message);
+          // Revert UI state if server request failed
           if (action === 'stop') {
             setIsProcessing(true);
             setIsPaused(false);
             setIsStopped(false);
-            isStoppingRef.current = false;
             setCampaignData((prev) => (prev ? { ...prev, status: 'processing' } : null));
           } else if (action === 'pause') {
             setIsProcessing(true);
             setIsPaused(false);
             setIsStopped(false);
-            isPausingRef.current = false;
             setCampaignData((prev) => (prev ? { ...prev, status: 'processing' } : null));
           } else {
             setIsProcessing(false);
             setIsPaused(true);
             setIsStopped(false);
-            isResumingRef.current = false;
             setCampaignData((prev) => (prev ? { ...prev, status: 'paused' } : null));
           }
         }
       } catch (error) {
         console.error(`Error ${action}ing campaign:`, error);
+        // Revert UI state on error
         if (action === 'stop') {
           setIsProcessing(true);
           setIsPaused(false);
           setIsStopped(false);
-          isStoppingRef.current = false;
           setCampaignData((prev) => (prev ? { ...prev, status: 'processing' } : null));
         } else if (action === 'pause') {
           setIsProcessing(true);
           setIsPaused(false);
           setIsStopped(false);
-          isPausingRef.current = false;
           setCampaignData((prev) => (prev ? { ...prev, status: 'processing' } : null));
         } else {
           setIsProcessing(false);
           setIsPaused(true);
           setIsStopped(false);
-          isResumingRef.current = false;
           setCampaignData((prev) => (prev ? { ...prev, status: 'paused' } : null));
         }
+      } finally {
+        // Reset control states
+        setControlStates({ isStopping: false, isPausing: false, isResuming: false });
       }
     },
     [campaignData, getToken, connectionStatus, delayRange]
@@ -767,6 +794,7 @@ export default function CampaignDetailsDialog({
   const handlePauseCampaign = useCallback(() => handleCampaignControl('pause'), [handleCampaignControl]);
   const handleResumeCampaign = useCallback(() => handleCampaignControl('resume'), [handleCampaignControl]);
 
+  // Cleanup on dialog close
   useEffect(() => {
     if (!open) {
       hasLoadedDetailsRef.current = false;
@@ -782,6 +810,7 @@ export default function CampaignDetailsDialog({
       setStatusFilter('all');
       setSelectedInstances([]);
       setDelayRange({ start: 1, end: 1 });
+      setControlStates({ isStopping: false, isPausing: false, isResuming: false });
       setConnectionStatus({
         isConnected: false,
         message: 'Initializing...',
@@ -790,10 +819,6 @@ export default function CampaignDetailsDialog({
         totalCount: 0,
         isLoading: true
       });
-      
-      isStoppingRef.current = false;
-      isPausingRef.current = false;
-      isResumingRef.current = false;
       
       if (autoRefreshTimeoutRef.current) {
         clearTimeout(autoRefreshTimeoutRef.current);
@@ -804,6 +829,9 @@ export default function CampaignDetailsDialog({
         clearInterval(instanceCheckIntervalRef.current);
         instanceCheckIntervalRef.current = null;
       }
+
+      // Clear instance cache when dialog closes
+      instanceCacheRef.current = null;
     }
   }, [open]);
 
@@ -899,23 +927,23 @@ export default function CampaignDetailsDialog({
                 <>
                   <Button
                     onClick={handlePauseCampaign}
-                    disabled={isPausingRef.current}
+                    disabled={controlStates.isPausing}
                     variant="outline"
                     size="sm"
                     className="bg-yellow-600/20 border-yellow-500 text-yellow-400 hover:bg-yellow-600/30 transition-all duration-75"
                   >
                     <Pause className="h-4 w-4 mr-2" />
-                    {isPausingRef.current ? 'Pausing...' : 'Pause'}
+                    {controlStates.isPausing ? 'Pausing...' : 'Pause'}
                   </Button>
                   <Button
                     onClick={handleStopCampaign}
-                    disabled={isStoppingRef.current}
+                    disabled={controlStates.isStopping}
                     variant="outline"
                     size="sm"
                     className="bg-red-600/20 border-red-500 text-red-400 hover:bg-red-600/30 transition-all duration-75"
                   >
                     <StopCircle className="h-4 w-4 mr-2" />
-                    {isStoppingRef.current ? 'Stopping...' : 'Stop'}
+                    {controlStates.isStopping ? 'Stopping...' : 'Stop'}
                   </Button>
                 </>
               )}
@@ -923,7 +951,7 @@ export default function CampaignDetailsDialog({
                 <>
                   <Button
                     onClick={handleResumeCampaign}
-                    disabled={isResumingRef.current || !canResume}
+                    disabled={controlStates.isResuming || !canResume}
                     variant="outline"
                     size="sm"
                     className={`transition-all duration-75 ${
@@ -933,18 +961,18 @@ export default function CampaignDetailsDialog({
                     }`}
                   >
                     <Play className="h-4 w-4 mr-2" />
-                    {isResumingRef.current ? 'Resuming...' : 
+                    {controlStates.isResuming ? 'Resuming...' : 
                      !canResume ? 'Waiting for Connection' : 'Resume'}
                   </Button>
                   <Button
                     onClick={handleStopCampaign}
-                    disabled={isStoppingRef.current}
+                    disabled={controlStates.isStopping}
                     variant="outline"
                     size="sm"
                     className="bg-red-600/20 border-red-500 text-red-400 hover:bg-red-600/30 transition-all duration-75"
                   >
                     <StopCircle className="h-4 w-4 mr-2" />
-                    {isStoppingRef.current ? 'Stopping...' : 'Stop'}
+                    {controlStates.isStopping ? 'Stopping...' : 'Stop'}
                   </Button>
                 </>
               )}

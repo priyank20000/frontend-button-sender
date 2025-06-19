@@ -192,19 +192,6 @@ export default function ChooseTemplate({
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-zinc-400 text-sm">5 / page</span>
-          <Select value="5">
-            <SelectTrigger className="w-20 bg-zinc-800 border-zinc-700 text-zinc-200">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-zinc-800 border-zinc-700 text-zinc-200">
-              <SelectItem value="5">5</SelectItem>
-              <SelectItem value="10">10</SelectItem>
-              <SelectItem value="20">20</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
       </div>
     </div>
   );

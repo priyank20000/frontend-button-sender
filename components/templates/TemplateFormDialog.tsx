@@ -293,7 +293,9 @@ export default function TemplateFormDialog({
                     <option key={i} value={`variable ${i + 1}`}>
                       Variable {i + 1}
                     </option>
+                    
                   ))}
+                  <option value="" disabled>Add More variable limit 30</option>
                 </select>
                 <Button
                   type="button"

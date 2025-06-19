@@ -46,13 +46,13 @@ export default function ChooseTemplate({
     localStorage.removeItem('token');
     Cookies.remove('user', { path: '/', secure: window.location.protocol === 'https:', sameSite: 'Lax' });
     localStorage.removeItem('user');
-    router.push('/login');
+    router.push('/');
   };
 
   const fetchTemplates = useCallback(async () => {
     const token = await getToken();
     if (!token) {
-      router.push('/login');
+      router.push('/');
       return;
     }
 

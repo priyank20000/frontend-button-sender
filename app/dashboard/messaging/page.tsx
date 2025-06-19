@@ -53,7 +53,7 @@ interface Campaign {
   };
   instances: Instance[];
   recipients: Recipient[];
-  status: 'completed' | 'failed' | 'processing';
+  status: 'completed' | 'failed' | 'processing' | 'paused';
   totalMessages: number;
   sentMessages: number;
   failedMessages: number;
@@ -166,73 +166,156 @@ export default function MessagingPage() {
     localStorage.removeItem('token');
     Cookies.remove('user', { path: '/', secure: window.location.protocol === 'https:', sameSite: 'Lax' });
     localStorage.removeItem('user');
-    router.push('/login');
+    router.push('/');
   };
 
-  // Optimized fetch data with better error handling and caching
+  // Handle campaign updates from real-time events
+  const handleCampaignUpdate = useCallback((updatedCampaign: Campaign) => {
+    setCampaigns(prev => {
+      const existingIndex = prev.findIndex(campaign => campaign._id === updatedCampaign._id);
+      
+      let newCampaigns;
+      if (existingIndex !== -1) {
+        // Update existing campaign
+        newCampaigns = prev.map(campaign => 
+          campaign._id === updatedCampaign._id ? updatedCampaign : campaign
+        );
+      } else {
+        // Add new campaign at the beginning
+        newCampaigns = [updatedCampaign, ...prev];
+        setTotalCampaigns(prevTotal => prevTotal + 1);
+      }
+
+      // Update stats with the new campaigns list
+      setCampaignStats(prevStats => ({
+        total: newCampaigns.length,
+        completed: newCampaigns.filter(c => c.status === 'completed').length,
+        failed: newCampaigns.filter(c => c.status === 'failed').length,
+        processing: newCampaigns.filter(c => c.status === 'processing').length,
+      }));
+
+      return newCampaigns;
+    });
+
+    // Update selected campaign if it's the one being viewed
+    if (selectedCampaign && selectedCampaign._id === updatedCampaign._id) {
+      setSelectedCampaign(updatedCampaign);
+    }
+  }, [selectedCampaign]);
+
+  // Add new campaign to the list immediately
+  const addNewCampaign = useCallback((newCampaign: Campaign) => {
+    setCampaigns(prev => {
+      // Check if campaign already exists
+      const exists = prev.some(campaign => campaign._id === newCampaign._id);
+      if (exists) {
+        return prev;
+      }
+      
+      // Add new campaign at the beginning
+      const newCampaigns = [newCampaign, ...prev];
+      
+      // Update total count
+      setTotalCampaigns(prevTotal => prevTotal + 1);
+      
+      // Update stats
+      setCampaignStats(prevStats => ({
+        total: prevStats.total + 1,
+        completed: newCampaigns.filter(c => c.status === 'completed').length,
+        failed: newCampaigns.filter(c => c.status === 'failed').length,
+        processing: newCampaigns.filter(c => c.status === 'processing').length,
+      }));
+      
+      return newCampaigns;
+    });
+  }, []);
+
   const fetchData = useCallback(async (showLoader = true) => {
     const token = await getToken();
     if (!token) {
-      router.push('/login');
+      router.push('/');
       return;
     }
-
+  
     if (showLoader) {
       setIsLoading(true);
     }
-    
+  
     try {
-      // Fetch instances and campaigns in parallel for better performance
-      const [instanceResponse, campaignResponse] = await Promise.all([
-        fetch('https://whatsapp.recuperafly.com/api/instance/all', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({}),
-        }),
-        fetch('https://whatsapp.recuperafly.com/api/template/message/all', {
+      let allInstances: Instance[] = [];
+      let page = 0;
+      const limit = 10;
+  
+      // Fetch instances with pagination and connected status filter
+      while (true) {
+        const instanceResponse = await fetch('https://whatsapp.recuperafly.com/api/instance/all', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            page: currentPage - 1,
-            limit: campaignsPerPage,
-            search: searchValue,
-            status: statusFilter === 'all' ? undefined : statusFilter
+            page,
+            limit,
+            instance_status: 'connected', // Add filter for connected instances
           }),
-        })
-      ]);
-
-      if (instanceResponse.status === 401 || campaignResponse.status === 401) {
+        });
+  
+        if (instanceResponse.status === 401) {
+          handleUnauthorized();
+          return;
+        }
+  
+        const instanceData = await instanceResponse.json();
+        if (instanceData.status) {
+          const fetchedInstances = instanceData.instances || [];
+          allInstances = [...allInstances, ...fetchedInstances];
+          console.log('Fetched instances:', fetchedInstances); // Debug
+          if (fetchedInstances.length < limit || allInstances.length >= instanceData.total) {
+            break;
+          }
+          page++;
+        } else {
+          showToast(instanceData.message || 'Failed to fetch instances', 'error');
+          break;
+        }
+      }
+  
+      setInstances(allInstances);
+      console.log('All connected instances:', allInstances); // Debug
+  
+      // Fetch campaigns (unchanged)
+      const campaignResponse = await fetch('https://whatsapp.recuperafly.com/api/template/message/all', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          page: currentPage - 1,
+          limit: campaignsPerPage,
+          search: searchValue,
+          status: statusFilter === 'all' ? undefined : statusFilter,
+        }),
+      });
+  
+      if (campaignResponse.status === 401) {
         handleUnauthorized();
         return;
       }
-
-      const [instanceData, campaignData] = await Promise.all([
-        instanceResponse.json(),
-        campaignResponse.json()
-      ]);
-
-      // Process instances
-      const fetchedInstances = instanceData.status ? instanceData.instances || [] : [];
-      setInstances(fetchedInstances);
-
-      // Process campaigns
+  
+      const campaignData = await campaignResponse.json();
       if (campaignData.status) {
         const mappedCampaigns: Campaign[] = campaignData.messages.map((msg: any) => ({
           _id: msg._id,
           name: msg.name,
           template: {
             _id: msg.templateId,
-            name: `Template ${msg.templateId.slice(-4)}`,
+            name: `${msg.templateId.name}`,
             messageType: 'Text',
           },
           instances: (msg.instanceIds || [])
-            .map((id: string) => fetchedInstances.find((inst: Instance) => inst._id === id))
+            .map((id: string) => allInstances.find((inst: Instance) => inst._id === id))
             .filter((inst: Instance | undefined) => inst !== undefined),
           recipients: msg.recipients.map((rec: any) => ({
             phone: rec.phone,
@@ -240,24 +323,23 @@ export default function MessagingPage() {
             variables: {},
           })),
           status: msg.status,
-          totalMessages: msg.statistics.total,
-          sentMessages: msg.statistics.sent,
-          failedMessages: msg.statistics.failed,
+          totalMessages: msg.statistics?.total || msg.recipients?.length || 0,
+          sentMessages: msg.statistics?.sent || 0,
+          failedMessages: msg.statistics?.failed || 0,
           createdAt: msg.createdAt,
           delayRange: msg.settings.delayRange,
         }));
-
+  
         setCampaigns(mappedCampaigns);
         setTotalCampaigns(campaignData.total || 0);
-        
-        // Calculate stats properly
+  
         const stats = {
           total: campaignData.total || 0,
           completed: mappedCampaigns.filter(c => c.status === 'completed').length,
           failed: mappedCampaigns.filter(c => c.status === 'failed').length,
           processing: mappedCampaigns.filter(c => c.status === 'processing').length,
         };
-        
+  
         setCampaignStats(stats);
       } else {
         showToast(campaignData.message || 'Failed to fetch campaigns', 'error');
@@ -295,18 +377,19 @@ export default function MessagingPage() {
     await fetchData(false);
   };
 
-  // Campaign operations
+  // Campaign operations - Updated delete function to use correct API endpoint
   const handleDeleteCampaign = async (campaignId: string) => {
     const token = await getToken();
     if (!token) {
       showToast('Please log in to delete campaign', 'error');
-      router.push('/login');
+      router.push('/');
       return;
     }
 
     setIsDeleting(prev => ({ ...prev, [campaignId]: true }));
     try {
-      const response = await fetch('https://whatsapp.recuperafly.com/api/campaigns/delete', {
+      // Updated API endpoint to use /message/delete
+      const response = await fetch('https://whatsapp.recuperafly.com/api/template/message/delete', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -351,7 +434,7 @@ export default function MessagingPage() {
   const handleSendCampaign = async () => {
     const token = await getToken();
     if (!token) {
-      router.push('/login');
+      router.push('/');
       return;
     }
 
@@ -391,8 +474,33 @@ export default function MessagingPage() {
       }
 
       setResponseDialogOpen(true);
-      showToast('Campaign is being processed in the background!', 'success');
-      setShowCreateCampaign(false);
+      showToast('Campaign created and started successfully!', 'success');
+      
+      // IMMEDIATE UPDATE: Create and add the new campaign to the list
+      const newCampaign: Campaign = {
+        _id: result.campaignId || result.campaign?._id || `temp_${Date.now()}`,
+        name: campaignName,
+        template: {
+          _id: selectedTemplate,
+          name: `Template ${selectedTemplate.slice(-4)}`,
+          messageType: 'Text',
+        },
+        instances: selectedInstances.map(id => instances.find(inst => inst._id === id)).filter(Boolean) as Instance[],
+        recipients: antdContacts.filter(r => r.number && r.name).map(contact => ({
+          phone: contact.number,
+          name: contact.name,
+          variables: {},
+        })),
+        status: 'processing',
+        totalMessages: antdContacts.filter(r => r.number && r.name).length,
+        sentMessages: 0,
+        failedMessages: 0,
+        createdAt: new Date().toISOString(),
+        delayRange,
+      };
+
+      // Add to campaigns list immediately
+      addNewCampaign(newCampaign);
 
       // Reset form
       setCampaignName('');
@@ -402,10 +510,10 @@ export default function MessagingPage() {
       setAntdContacts([]);
       setDelayRange({ start: 3, end: 5 });
 
-      // Refresh data immediately to show the new campaign
+      // Also refresh data after a short delay to ensure consistency
       setTimeout(() => {
         fetchData(false);
-      }, 1000);
+      }, 2000);
 
     } catch (err) {
       showToast('Error sending campaign: ' + (err instanceof Error ? err.message : 'Unknown error'), 'error');
@@ -413,6 +521,33 @@ export default function MessagingPage() {
       setIsSending(false);
     }
   };
+
+  // Enhanced dialog close handler with automatic refresh
+  const handleCloseCreateCampaign = useCallback(() => {
+    setShowCreateCampaign(false);
+    
+    // Reset form data
+    setCampaignName('');
+    setSelectedTemplate('');
+    setSelectedInstances([]);
+    setRecipients([{ phone: '', name: '', variables: { var1: '', var2: '', var3: '', var4: '', var5: '', var6: '', var7: '', var8: '', var9: '', var10: '' } }]);
+    setAntdContacts([]);
+    setDelayRange({ start: 3, end: 5 });
+    
+    // Automatically refresh campaigns data when dialog closes
+    console.log('Dialog closed, refreshing campaigns...');
+    fetchData(false);
+  }, [fetchData]);
+
+  // Enhanced dialog close handler for campaign details
+  const handleCloseCampaignDetails = useCallback(() => {
+    setShowCampaignDetails(false);
+    setSelectedCampaign(null);
+    
+    // Automatically refresh campaigns data when dialog closes
+    console.log('Campaign details closed, refreshing campaigns...');
+    fetchData(false);
+  }, [fetchData]);
 
   // Pagination
   const totalPages = Math.ceil(totalCampaigns / campaignsPerPage);
@@ -507,6 +642,7 @@ export default function MessagingPage() {
                   setShowCampaignDetails(true);
                 }}
                 onDelete={handleDeleteCampaign}
+                onCampaignUpdate={handleCampaignUpdate}
               />
             )}
           </CardContent>
@@ -572,7 +708,7 @@ export default function MessagingPage() {
         {/* Dialogs */}
         <CreateCampaignDialog
           open={showCreateCampaign}
-          onOpenChange={setShowCreateCampaign}
+          onOpenChange={handleCloseCreateCampaign}
           onCreateCampaign={() => {}}
           onSendCampaign={handleSendCampaign}
           isCreating={isCreatingCampaign}
@@ -596,7 +732,7 @@ export default function MessagingPage() {
 
         <CampaignDetailsDialog
           open={showCampaignDetails}
-          onOpenChange={setShowCampaignDetails}
+          onOpenChange={handleCloseCampaignDetails}
           campaign={selectedCampaign}
         />
       </div>

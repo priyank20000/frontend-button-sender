@@ -86,6 +86,10 @@ export default function FinalStep({
   const instanceCheckIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const lastInstanceStatusRef = useRef<{ [key: string]: string }>({});
 
+<<<<<<< HEAD
+=======
+  // Get token for socket connection
+>>>>>>> main
   const getToken = useCallback((): string | null => {
     const cookieToken = Cookies.get('token');
     if (cookieToken) return cookieToken;
@@ -94,7 +98,12 @@ export default function FinalStep({
 
   const token = getToken();
 
+<<<<<<< HEAD
   const { emit, on, off, isConnected, reconnect } = useSocket({
+=======
+  // Socket connection for real-time updates
+  const { emit, on, off, isConnected } = useSocket({
+>>>>>>> main
     token,
     onConnect: () => {
       console.log('Socket connected for campaign tracking');
@@ -115,6 +124,7 @@ export default function FinalStep({
     }
   });
 
+<<<<<<< HEAD
   const fetchCampaignStatus = useCallback(async () => {
     try {
       const authToken = getToken();
@@ -159,12 +169,23 @@ export default function FinalStep({
   const checkInstanceConnections = useCallback(() => {
     if (!campaignStarted || !selectedInstances.length || !isProcessing) return;
 
+=======
+  // ULTRA-FAST instance monitoring with INSTANT disconnect detection
+  const checkInstanceConnections = useCallback(() => {
+    if (!campaignStarted || !selectedInstances.length || !isProcessing) return;
+
+    // Get current status of all selected instances
+>>>>>>> main
     const currentInstanceStatuses: { [key: string]: string } = {};
     selectedInstances.forEach(instanceId => {
       const instance = instances.find(inst => inst._id === instanceId);
       currentInstanceStatuses[instanceId] = instance?.whatsapp?.status || 'disconnected';
     });
 
+<<<<<<< HEAD
+=======
+    // Check if any instance status changed from connected to disconnected
+>>>>>>> main
     let anyDisconnected = false;
     selectedInstances.forEach(instanceId => {
       const previousStatus = lastInstanceStatusRef.current[instanceId];
@@ -176,6 +197,10 @@ export default function FinalStep({
       }
     });
 
+<<<<<<< HEAD
+=======
+    // Update the reference for next check
+>>>>>>> main
     lastInstanceStatusRef.current = currentInstanceStatuses;
 
     const connectedInstances = selectedInstances.filter(instanceId => 
@@ -186,21 +211,37 @@ export default function FinalStep({
       currentInstanceStatuses[instanceId] !== 'connected'
     );
 
+<<<<<<< HEAD
     if (connectedInstances.length === 0 && isProcessing && !instancesDisconnected) {
       console.log('🚨 ALL INSTANCES DISCONNECTED - INSTANT AUTO-PAUSE');
       
+=======
+    // INSTANT AUTO-PAUSE: If all selected instances are disconnected during active campaign
+    if (connectedInstances.length === 0 && isProcessing && !instancesDisconnected) {
+      console.log('🚨 ALL INSTANCES DISCONNECTED - INSTANT AUTO-PAUSE');
+      
+      // IMMEDIATE UI UPDATE - No delays, no waiting
+>>>>>>> main
       setInstancesDisconnected(true);
       setDisconnectionReason(`All ${disconnectedInstances.length} selected instance(s) disconnected`);
       setIsProcessing(false);
       setIsPaused(true);
       setCanResumeAfterReconnect(false);
       
+<<<<<<< HEAD
+=======
+      // Update campaign progress to show disconnection IMMEDIATELY
+>>>>>>> main
       setCampaignProgress(prev => ({
         ...prev,
         status: 'paused',
         instancesDisconnected: true
       }));
 
+<<<<<<< HEAD
+=======
+      // Send pause signal to backend (fire and forget - don't wait)
+>>>>>>> main
       if (currentCampaignId) {
         const authToken = getToken();
         if (authToken) {
@@ -219,13 +260,23 @@ export default function FinalStep({
           });
         }
       }
+<<<<<<< HEAD
     } else if (connectedInstances.length > 0 && instancesDisconnected && isPaused) {
+=======
+    } 
+    // If instances reconnect while campaign is paused due to disconnection
+    else if (connectedInstances.length > 0 && instancesDisconnected && isPaused) {
+>>>>>>> main
       console.log('✅ Instances reconnected, ready to resume');
       
       setInstancesDisconnected(false);
       setCanResumeAfterReconnect(true);
       setDisconnectionReason('');
       
+<<<<<<< HEAD
+=======
+      // Update campaign progress to show ready to resume
+>>>>>>> main
       setCampaignProgress(prev => ({
         ...prev,
         instancesDisconnected: false,
@@ -234,8 +285,15 @@ export default function FinalStep({
     }
   }, [campaignStarted, selectedInstances, instances, isProcessing, isPaused, instancesDisconnected, currentCampaignId, getToken]);
 
+<<<<<<< HEAD
   useEffect(() => {
     if (campaignStarted && selectedInstances.length > 0) {
+=======
+  // Initialize instance status tracking when campaign starts
+  useEffect(() => {
+    if (campaignStarted && selectedInstances.length > 0) {
+      // Initialize the reference with current statuses
+>>>>>>> main
       const initialStatuses: { [key: string]: string } = {};
       selectedInstances.forEach(instanceId => {
         const instance = instances.find(inst => inst._id === instanceId);
@@ -245,9 +303,19 @@ export default function FinalStep({
     }
   }, [campaignStarted, selectedInstances, instances]);
 
+<<<<<<< HEAD
   useEffect(() => {
     if (campaignStarted && isProcessing) {
       checkInstanceConnections();
+=======
+  // Start ULTRA-AGGRESSIVE instance monitoring when campaign starts
+  useEffect(() => {
+    if (campaignStarted && isProcessing) {
+      // Check immediately
+      checkInstanceConnections();
+      
+      // Set up ULTRA-FREQUENT interval for INSTANT detection (every 500ms)
+>>>>>>> main
       instanceCheckIntervalRef.current = setInterval(checkInstanceConnections, 500);
       
       return () => {
@@ -257,11 +325,19 @@ export default function FinalStep({
         }
       };
     } else if (instanceCheckIntervalRef.current) {
+<<<<<<< HEAD
+=======
+      // Clear interval when not processing
+>>>>>>> main
       clearInterval(instanceCheckIntervalRef.current);
       instanceCheckIntervalRef.current = null;
     }
   }, [campaignStarted, isProcessing, checkInstanceConnections]);
 
+<<<<<<< HEAD
+=======
+  // Cleanup interval on unmount
+>>>>>>> main
   useEffect(() => {
     return () => {
       if (instanceCheckIntervalRef.current) {
@@ -270,6 +346,7 @@ export default function FinalStep({
     };
   }, []);
 
+<<<<<<< HEAD
   const handleCampaignProgress = useCallback((data: any) => {
     if (data.campaignId !== currentCampaignId) return;
 
@@ -277,6 +354,20 @@ export default function FinalStep({
     if (now - lastProgressUpdateRef.current < 500) return;
     lastProgressUpdateRef.current = now;
 
+=======
+  // Enhanced progress handler with disconnect handling
+  const handleCampaignProgress = useCallback((data: any) => {
+    if (data.campaignId !== currentCampaignId) return;
+
+    // Throttle updates for better performance with large numbers
+    const now = Date.now();
+    if (now - lastProgressUpdateRef.current < 500) {
+      return;
+    }
+    lastProgressUpdateRef.current = now;
+
+    // Handle disconnection status from backend
+>>>>>>> main
     if (data.instancesDisconnected !== undefined) {
       setInstancesDisconnected(data.instancesDisconnected);
       if (data.instancesDisconnected) {
@@ -288,6 +379,10 @@ export default function FinalStep({
       }
     }
 
+<<<<<<< HEAD
+=======
+    // Batch state updates for better performance
+>>>>>>> main
     setCampaignProgress(prev => ({
       ...prev,
       campaignId: data.campaignId,
@@ -305,6 +400,10 @@ export default function FinalStep({
       instancesDisconnected: data.instancesDisconnected
     }));
 
+<<<<<<< HEAD
+=======
+    // Update recipient status efficiently with batch updates
+>>>>>>> main
     if (data.lastRecipient && data.lastMessageStatus) {
       const recipientIndex = antdContacts.findIndex(contact => contact.name === data.lastRecipient);
       if (recipientIndex !== -1) {
@@ -316,9 +415,17 @@ export default function FinalStep({
       }
     }
 
+<<<<<<< HEAD
     setExistingNumbers(data.sent);
     setNonExistingNumbers(data.notExist || 0);
 
+=======
+    // Update counts
+    setExistingNumbers(data.sent);
+    setNonExistingNumbers(data.notExist || 0);
+
+    // Update state flags and reset control flags
+>>>>>>> main
     if (data.status === 'completed') {
       setIsProcessing(false);
       setIsCompleted(true);
@@ -368,9 +475,17 @@ export default function FinalStep({
     isPausingRef.current = false;
     isResumingRef.current = false;
     
+<<<<<<< HEAD
     setExistingNumbers(data.sent);
     setNonExistingNumbers(data.notExist || 0);
     
+=======
+    // Final count update
+    setExistingNumbers(data.sent);
+    setNonExistingNumbers(data.notExist || 0);
+    
+    // Final status update for all remaining recipients
+>>>>>>> main
     setCampaignProgress(prev => ({
       ...prev,
       status: 'completed',
@@ -399,6 +514,10 @@ export default function FinalStep({
       instancesDisconnected: false
     }));
   
+<<<<<<< HEAD
+=======
+    // Update recipient statuses: set "stopped" for all pending recipients
+>>>>>>> main
     setRecipientStatuses(prev => {
       const newStatuses = [...prev];
       return newStatuses.map(status => (status === 'pending' ? 'stopped' : status));
@@ -415,6 +534,10 @@ export default function FinalStep({
     isPausingRef.current = false;
     isResumingRef.current = false;
     
+<<<<<<< HEAD
+=======
+    // Handle disconnection-related pause
+>>>>>>> main
     if (data.instancesDisconnected) {
       setInstancesDisconnected(true);
       setDisconnectionReason('Campaign paused due to instance disconnection');
@@ -454,6 +577,10 @@ export default function FinalStep({
     }));
   }, [currentCampaignId]);
 
+<<<<<<< HEAD
+=======
+  // Listen for campaign progress updates
+>>>>>>> main
   useEffect(() => {
     if (!isConnected || !currentCampaignId) return;
 
@@ -473,8 +600,15 @@ export default function FinalStep({
   }, [isConnected, currentCampaignId, on, off, handleCampaignProgress, handleCampaignComplete, handleCampaignStopped, handleCampaignPaused, handleCampaignResumed]);
 
   const handleSendMessages = async () => {
+<<<<<<< HEAD
     if (isLoading || isProcessing) return;
 
+=======
+    // Prevent multiple simultaneous requests
+    if (isLoading || isProcessing) return;
+
+    // Cancel any previous request
+>>>>>>> main
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -583,28 +717,50 @@ export default function FinalStep({
       console.error('Error sending campaign:', err);
       setIsProcessing(false);
       setCampaignStarted(false);
+<<<<<<< HEAD
+=======
+      // Handle error (you might want to show an error toast here)
+>>>>>>> main
     } finally {
       setIsLoading(false);
     }
   };
 
+<<<<<<< HEAD
+=======
+  // Enhanced campaign control with separate stop and pause
+>>>>>>> main
   const handleCampaignControl = useCallback(async (action: 'stop' | 'pause' | 'resume') => {
     if (!currentCampaignId) return;
-
+    
+    // Prevent multiple simultaneous control actions
     if (action === 'stop' && isStoppingRef.current) return;
     if (action === 'pause' && isPausingRef.current) return;
     if (action === 'resume' && isResumingRef.current) return;
 
+<<<<<<< HEAD
+    if (action === 'stop' && isStoppingRef.current) return;
+    if (action === 'pause' && isPausingRef.current) return;
+    if (action === 'resume' && isResumingRef.current) return;
+
+=======
+    // For resume, check if instances are connected
+>>>>>>> main
     if (action === 'resume' && instancesDisconnected) {
       const connectedInstances = instances.filter(instance => 
         selectedInstances.includes(instance._id) && instance.whatsapp?.status === 'connected'
       );
+<<<<<<< HEAD
+=======
+      
+>>>>>>> main
       if (connectedInstances.length === 0) {
         console.log('Cannot resume: No instances are connected');
         return;
       }
     }
 
+<<<<<<< HEAD
     if (action === 'stop' && !isConnected) {
       console.warn('Socket disconnected, relying on polling for stop status');
       await fetchCampaignStatus();
@@ -620,6 +776,44 @@ export default function FinalStep({
       const timeoutId = setTimeout(() => controller.abort(), 10000);
 
       const response = await fetch('https://whatsapp.recuperafly.com/api/template/campaign/control', {
+=======
+    // Set control flags
+    if (action === 'stop') {
+      isStoppingRef.current = true;
+    } else if (action === 'pause') {
+      isPausingRef.current = true;
+    } else {
+      isResumingRef.current = true;
+    }
+
+    // INSTANT UI UPDATE - No waiting for server response
+    if (action === 'stop') {
+      setIsProcessing(false);
+      setIsStopped(true);
+      setIsPaused(false);
+    } else if (action === 'pause') {
+      setIsProcessing(false);
+      setIsPaused(true);
+      setIsStopped(false);
+    } else {
+      setIsProcessing(true);
+      setIsPaused(false);
+      setIsStopped(false);
+      setInstancesDisconnected(false);
+      setCanResumeAfterReconnect(false);
+      setDisconnectionReason('');
+    }
+
+    // Send request in background without blocking UI
+    try {
+      const authToken = getToken();
+      
+      // Fire and forget with improved error handling
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      
+      fetch('https://whatsapp.recuperafly.com/api/template/campaign/control', {
+>>>>>>> main
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${authToken}`,
@@ -630,6 +824,7 @@ export default function FinalStep({
           action: action
         }),
         signal: controller.signal
+<<<<<<< HEAD
       });
 
       clearTimeout(timeoutId);
@@ -700,9 +895,96 @@ export default function FinalStep({
       console.log('Navigation completed');
     } catch (error) {
       console.error('Error in handleComplete:', error);
-    }
-  };
+=======
+      }).then(response => {
+        clearTimeout(timeoutId);
+        return response.json();
+      })
+        .then(result => {
+          if (result.status) {
+            console.log(`Campaign ${action} signal sent successfully`);
+          } else {
+            console.error(`Campaign ${action} failed:`, result.message);
+            // Revert UI state if server request failed
+            if (action === 'stop') {
+              setIsProcessing(true);
+              setIsStopped(false);
+              isStoppingRef.current = false;
+            } else if (action === 'pause') {
+              setIsProcessing(true);
+              setIsPaused(false);
+              isPausingRef.current = false;
+            } else {
+              setIsProcessing(false);
+              setIsPaused(true);
+              isResumingRef.current = false;
+            }
+          }
+        })
+        .catch(error => {
+          clearTimeout(timeoutId);
+          if (error.name !== 'AbortError') {
+            console.error(`Error ${action}ing campaign:`, error);
+            // Revert UI state on error
+            if (action === 'stop') {
+              setIsProcessing(true);
+              setIsStopped(false);
+              isStoppingRef.current = false;
+            } else if (action === 'pause') {
+              setIsProcessing(true);
+              setIsPaused(false);
+              isPausingRef.current = false;
+            } else {
+              setIsProcessing(false);
+              setIsPaused(true);
+              isResumingRef.current = false;
+            }
+          }
+        });
 
+    } catch (error) {
+      console.error(`Error ${action}ing campaign:`, error);
+      // Revert UI state on error
+      if (action === 'stop') {
+        setIsProcessing(true);
+        setIsStopped(false);
+        isStoppingRef.current = false;
+      } else if (action === 'pause') {
+        setIsProcessing(true);
+        setIsPaused(false);
+        isPausingRef.current = false;
+      } else {
+        setIsProcessing(false);
+        setIsPaused(true);
+        isResumingRef.current = false;
+      }
+>>>>>>> main
+    }
+  }, [currentCampaignId, getToken, instancesDisconnected, instances, selectedInstances]);
+
+<<<<<<< HEAD
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      if (instanceCheckIntervalRef.current) {
+        clearInterval(instanceCheckIntervalRef.current);
+      }
+    };
+  }, []);
+=======
+  const handleStopCampaign = useCallback(() => handleCampaignControl('stop'), [handleCampaignControl]);
+  const handlePauseCampaign = useCallback(() => handleCampaignControl('pause'), [handleCampaignControl]);
+  const handleResumeCampaign = useCallback(() => handleCampaignControl('resume'), [handleCampaignControl]);
+
+  const handleComplete = () => {
+    onClose();
+    router.push('/dashboard/messaging?refresh=true');
+  };
+>>>>>>> main
+
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (abortControllerRef.current) {
@@ -737,13 +1019,24 @@ export default function FinalStep({
     return Math.round(((campaignProgress.sent + (campaignProgress.failed || 0) + (campaignProgress.notExist || 0)) / campaignProgress.total) * 100);
   };
 
+<<<<<<< HEAD
+=======
+  // Get connected instances count
+>>>>>>> main
   const getConnectedInstancesCount = () => {
     return instances.filter(instance => 
       selectedInstances.includes(instance._id) && instance.whatsapp?.status === 'connected'
     ).length;
   };
 
+<<<<<<< HEAD
   const shouldShowBackButton = !campaignStarted && onBack;
+=======
+  // Determine if back button should be shown
+  const shouldShowBackButton = !campaignStarted && onBack;
+
+  // Determine if resume button should be enabled - DISABLED if all instances disconnected
+>>>>>>> main
   const canResume = isPaused && !instancesDisconnected && getConnectedInstancesCount() > 0;
 
   return (
@@ -753,6 +1046,10 @@ export default function FinalStep({
         <p className="text-zinc-400 mb-6">Review your campaign details and send messages to all selected numbers.</p>
       </div>
 
+<<<<<<< HEAD
+=======
+      {/* Progress Stats */}
+>>>>>>> main
       {(isProcessing || isPaused || isStopped || isCompleted) && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <Card className="bg-blue-500/10 border-blue-500/20">
@@ -826,7 +1123,11 @@ export default function FinalStep({
                   onClick={handleStopCampaign}
                   variant="outline"
                   className="bg-red-600/20 border-red-500 text-red-400 hover:bg-red-600/30 transition-all duration-75"
+<<<<<<< HEAD
                   disabled={isStoppingRef.current || isStopped}
+=======
+                  disabled={isStoppingRef.current}
+>>>>>>> main
                 >
                   <StopCircle className="h-4 w-4 mr-2" />
                   {isStoppingRef.current ? 'Stopping...' : 'Stop'}
@@ -837,6 +1138,7 @@ export default function FinalStep({
         </Card>
       )}
 
+      {/* Enhanced Paused State with Disconnect Handling */}
       {isPaused && (
         <Card className={`${instancesDisconnected ? 'bg-orange-500/10 border-orange-500/20' : 'bg-yellow-500/10 border-yellow-500/20'}`}>
           <CardContent className="p-6">
@@ -887,7 +1189,11 @@ export default function FinalStep({
                   onClick={handleStopCampaign}
                   variant="outline"
                   className="bg-red-600/20 border-red-500 text-red-400 hover:bg-red-600/30 transition-all duration-75"
+<<<<<<< HEAD
                   disabled={isStoppingRef.current || isStopped}
+=======
+                  disabled={isStoppingRef.current}
+>>>>>>> main
                 >
                   <StopCircle className="h-4 w-4 mr-2" />
                   {isStoppingRef.current ? 'Stopping...' : 'Stop'}
@@ -898,6 +1204,10 @@ export default function FinalStep({
         </Card>
       )}
 
+<<<<<<< HEAD
+=======
+      {/* Stopped State */}
+>>>>>>> main
       {isStopped && (
         <Card className="bg-red-500/10 border-red-500/20">
           <CardContent className="p-6">

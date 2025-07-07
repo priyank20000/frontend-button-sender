@@ -300,24 +300,25 @@ export default function MessagingPage() {
           _id: msg._id,
           name: msg.name,
           template: {
-            _id: msg.templateId,
-            name: `${msg.templateId.name}`,
-            messageType: 'Text',
+            _id: msg.templateId?._id || msg.templateId,
+            name: msg.templateId?.name || 'Unknown Template',
+            messageType: msg.templateId?.messageType || 'Text',
           },
           instances: (msg.instanceIds || [])
             .map((id: string) => allInstances.find((inst: Instance) => inst._id === id))
             .filter((inst: Instance | undefined) => inst !== undefined),
-          recipients: msg.recipients.map((rec: any) => ({
+          recipients: (msg.recipients || []).map((rec: any) => ({
             phone: rec.phone,
             name: rec.name,
-            variables: {},
+            variables: rec.variables || {},
           })),
           status: msg.status,
           totalMessages: msg.statistics?.total || msg.recipients?.length || 0,
           sentMessages: msg.statistics?.sent || 0,
           failedMessages: msg.statistics?.failed || 0,
           createdAt: msg.createdAt,
-          delayRange: msg.settings.delayRange,
+          // Fix: Ensure delayRange always has a default value
+          delayRange: msg.delayRange || { start: 3, end: 5 },
         }));
   
         setCampaigns(mappedCampaigns);
@@ -335,6 +336,7 @@ export default function MessagingPage() {
         showToast(campaignData.message || 'Failed to fetch campaigns', 'error');
       }
     } catch (err) {
+      console.error('Error fetching data:', err);
       showToast('Error fetching data: ' + (err instanceof Error ? err.message : 'Unknown error'), 'error');
     } finally {
       if (showLoader) {
@@ -463,7 +465,7 @@ export default function MessagingPage() {
               Refresh
             </button>
             <Link
-              href="/dashboard/create-campaign"
+              href="/dashboard/campaign"
               className="bg-zinc-800 hover:bg-zinc-700 text-white font-medium px-5 py-2 h-12 rounded-xl transition-all duration-300 flex items-center justify-center gap-2"
             >
               <Plus className="h-5 w-5" />
@@ -503,7 +505,7 @@ export default function MessagingPage() {
                 <h3 className="text-xl font-semibold text-zinc-300 mb-2">No Campaigns Found</h3>
                 <p className="text-zinc-400 mb-6">Create your first campaign to get started.</p>
                 <Link
-                  href="/dashboard/create-campaign"
+                  href="/dashboard/campaign"
                   className="bg-zinc-800 hover:bg-zinc-700 text-white font-medium px-5 h-12 rounded-xl transition-all duration-300 flex items-center gap-2"
                 >
                   <Plus className="h-5 w-5" />

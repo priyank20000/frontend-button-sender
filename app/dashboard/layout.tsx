@@ -12,7 +12,8 @@ import {
   X,
   Smartphone,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Plus
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -31,6 +32,11 @@ const sidebarLinks = [
     title: 'Messaging',
     href: '/dashboard/messaging',
     icon: MessageSquare
+  },
+  {
+    title: 'Create Campaign',
+    href: '/dashboard/campaign',
+    icon: Plus
   },
   {
     title: 'Templates',

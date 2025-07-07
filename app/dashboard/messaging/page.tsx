@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Plus, MessageSquare, Loader2, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
+import Link from 'next/link';
 import Cookies from 'js-cookie';
 import { useRouter, useSearchParams } from 'next/navigation';
 
@@ -12,7 +13,6 @@ import CampaignStats from '../../../components/CampaignStats';
 import CampaignFilters from '../../../components/CampaignFilters';
 import CampaignTable from '../../../components/CampaignTable';
 import CampaignDetailsDialog from '../../../components/CampaignDetailsDialog';
-import CreateCampaignDialog from '../../../components/CreateCampaignDialog';
 import ToastContainer from '../../../components/ToastContainer';
 
 // Types
@@ -80,16 +80,9 @@ export default function MessagingPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [instances, setInstances] = useState<Instance[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [selectedTemplate, setSelectedTemplate] = useState<string>('');
-  const [selectedInstances, setSelectedInstances] = useState<string[]>([]);
-  const [recipients, setRecipients] = useState<Recipient[]>([
-    { phone: '', name: '', variables: { var1: '', var2: '', var3: '', var4: '', var5: '', var6: '', var7: '', var8: '', var9: '', var10: '' } },
-  ]);
-  const [delayRange, setDelayRange] = useState<{ start: number; end: number }>({ start: 3, end: 5 });
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [responseDialogOpen, setResponseDialogOpen] = useState(false);
-  const [campaignName, setCampaignName] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [campaignsPerPage] = useState(10);
   const [totalCampaigns, setTotalCampaigns] = useState(0);
@@ -101,13 +94,10 @@ export default function MessagingPage() {
     failed: 0,
     processing: 0
   });
-  const [showCreateCampaign, setShowCreateCampaign] = useState(false);
-  const [isCreatingCampaign, setIsCreatingCampaign] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
   const [showCampaignDetails, setShowCampaignDetails] = useState(false);
   const [isDeleting, setIsDeleting] = useState<{ [key: string]: boolean }>({});
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
-  const [antdContacts, setAntdContacts] = useState<any[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const router = useRouter();
@@ -379,23 +369,21 @@ export default function MessagingPage() {
 
   // Campaign operations - Updated delete function to use correct API endpoint
   const handleDeleteCampaign = async (campaignId: string) => {
-    const token = await getToken();
-    if (!token) {
-      showToast('Please log in to delete campaign', 'error');
-      router.push('/');
-      return;
-    }
-
     setIsDeleting(prev => ({ ...prev, [campaignId]: true }));
+    
     try {
-      // Updated API endpoint to use /message/delete
-      const response = await fetch('https://whatsapp.recuperafly.com/api/template/message/delete', {
-        method: 'POST',
+      const token = await getToken();
+      if (!token) {
+        handleUnauthorized();
+        return;
+      }
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/campaigns/${campaignId}`, {
+        method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ campaignId }),
+          'Content-Type': 'application/json'
+        }
       });
 
       if (response.status === 401) {
@@ -403,141 +391,30 @@ export default function MessagingPage() {
         return;
       }
 
-      const data = await response.json();
-      if (data.status) {
-        // Update campaigns list immediately
-        setCampaigns(prev => prev.filter(c => c._id !== campaignId));
+      if (response.ok) {
+        showToast('Campaign deleted successfully', 'success');
+        // Remove from local state
+        setCampaigns(prev => prev.filter(campaign => campaign._id !== campaignId));
         setTotalCampaigns(prev => prev - 1);
         
-        // Update stats immediately
-        setCampaignStats(prev => ({
-          ...prev,
-          total: prev.total - 1
+        // Update stats
+        setCampaignStats(prevStats => ({
+          total: prevStats.total - 1,
+          completed: campaigns.find(c => c._id === campaignId)?.status === 'completed' ? prevStats.completed - 1 : prevStats.completed,
+          failed: campaigns.find(c => c._id === campaignId)?.status === 'failed' ? prevStats.failed - 1 : prevStats.failed,
+          processing: campaigns.find(c => c._id === campaignId)?.status === 'processing' ? prevStats.processing - 1 : prevStats.processing,
         }));
-        
-        const newTotalPages = Math.ceil((totalCampaigns - 1) / campaignsPerPage);
-        if (currentPage > newTotalPages && newTotalPages > 0) {
-          setCurrentPage(newTotalPages);
-        }
-        
-        showToast(data.message || 'Campaign deleted successfully', 'success');
       } else {
-        showToast(data.message || 'Failed to delete campaign', 'error');
+        const errorData = await response.json();
+        showToast(errorData.message || 'Failed to delete campaign', 'error');
       }
-    } catch (err) {
-      showToast('Error deleting campaign: ' + (err instanceof Error ? err.message : 'Unknown error'), 'error');
+    } catch (error) {
+      console.error('Error deleting campaign:', error);
+      showToast('Failed to delete campaign. Please try again.', 'error');
     } finally {
       setIsDeleting(prev => ({ ...prev, [campaignId]: false }));
     }
   };
-
-  const handleSendCampaign = async () => {
-    const token = await getToken();
-    if (!token) {
-      router.push('/');
-      return;
-    }
-
-    setIsSending(true);
-    try {
-      const payload = {
-        name: campaignName,
-        templateId: selectedTemplate,
-        instanceIds: selectedInstances,
-        recipients: recipients.map(({ phone, name, variables }) => ({
-          phone,
-          name,
-          variables: Object.fromEntries(
-            Object.entries(variables).filter(([_, value]) => value.trim() !== '')
-          ),
-        })),
-        delayRange,
-      };
-
-      const response = await fetch('https://whatsapp.recuperafly.com/api/template/send', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (response.status === 401) {
-        handleUnauthorized();
-        return;
-      }
-
-      const result = await response.json();
-      if (!result.status) {
-        throw new Error(result.message || 'Failed to send campaign');
-      }
-
-      setResponseDialogOpen(true);
-      showToast('Campaign created and started successfully!', 'success');
-      
-      // IMMEDIATE UPDATE: Create and add the new campaign to the list
-      const newCampaign: Campaign = {
-        _id: result.campaignId || result.campaign?._id || `temp_${Date.now()}`,
-        name: campaignName,
-        template: {
-          _id: selectedTemplate,
-          name: `Template ${selectedTemplate.slice(-4)}`,
-          messageType: 'Text',
-        },
-        instances: selectedInstances.map(id => instances.find(inst => inst._id === id)).filter(Boolean) as Instance[],
-        recipients: antdContacts.filter(r => r.number && r.name).map(contact => ({
-          phone: contact.number,
-          name: contact.name,
-          variables: {},
-        })),
-        status: 'processing',
-        totalMessages: antdContacts.filter(r => r.number && r.name).length,
-        sentMessages: 0,
-        failedMessages: 0,
-        createdAt: new Date().toISOString(),
-        delayRange,
-      };
-
-      // Add to campaigns list immediately
-      addNewCampaign(newCampaign);
-
-      // Reset form
-      setCampaignName('');
-      setSelectedTemplate('');
-      setSelectedInstances([]);
-      setRecipients([{ phone: '', name: '', variables: { var1: '', var2: '', var3: '', var4: '', var5: '', var6: '', var7: '', var8: '', var9: '', var10: '' } }]);
-      setAntdContacts([]);
-      setDelayRange({ start: 3, end: 5 });
-
-      // Also refresh data after a short delay to ensure consistency
-      setTimeout(() => {
-        fetchData(false);
-      }, 2000);
-
-    } catch (err) {
-      showToast('Error sending campaign: ' + (err instanceof Error ? err.message : 'Unknown error'), 'error');
-    } finally {
-      setIsSending(false);
-    }
-  };
-
-  // Enhanced dialog close handler with automatic refresh
-  const handleCloseCreateCampaign = useCallback(() => {
-    setShowCreateCampaign(false);
-    
-    // Reset form data
-    setCampaignName('');
-    setSelectedTemplate('');
-    setSelectedInstances([]);
-    setRecipients([{ phone: '', name: '', variables: { var1: '', var2: '', var3: '', var4: '', var5: '', var6: '', var7: '', var8: '', var9: '', var10: '' } }]);
-    setAntdContacts([]);
-    setDelayRange({ start: 3, end: 5 });
-    
-    // Automatically refresh campaigns data when dialog closes
-    console.log('Dialog closed, refreshing campaigns...');
-    fetchData(false);
-  }, [fetchData]);
 
   // Enhanced dialog close handler for campaign details
   const handleCloseCampaignDetails = useCallback(() => {
@@ -585,13 +462,13 @@ export default function MessagingPage() {
               <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
               Refresh
             </button>
-            <button
-              onClick={() => setShowCreateCampaign(true)}
+            <Link
+              href="/dashboard/create-campaign"
               className="bg-zinc-800 hover:bg-zinc-700 text-white font-medium px-5 py-2 h-12 rounded-xl transition-all duration-300 flex items-center justify-center gap-2"
             >
               <Plus className="h-5 w-5" />
               Create Campaign
-            </button>
+            </Link>
           </div>
         </div>
 
@@ -625,13 +502,13 @@ export default function MessagingPage() {
                 <MessageSquare className="h-16 w-16 text-zinc-600 mb-4" />
                 <h3 className="text-xl font-semibold text-zinc-300 mb-2">No Campaigns Found</h3>
                 <p className="text-zinc-400 mb-6">Create your first campaign to get started.</p>
-                <button
-                  onClick={() => setShowCreateCampaign(true)}
+                <Link
+                  href="/dashboard/create-campaign"
                   className="bg-zinc-800 hover:bg-zinc-700 text-white font-medium px-5 h-12 rounded-xl transition-all duration-300 flex items-center gap-2"
                 >
                   <Plus className="h-5 w-5" />
                   Create Campaign
-                </button>
+                </Link>
               </div>
             ) : (
               <CampaignTable
@@ -706,30 +583,6 @@ export default function MessagingPage() {
         </Card>
 
         {/* Dialogs */}
-        <CreateCampaignDialog
-          open={showCreateCampaign}
-          onOpenChange={handleCloseCreateCampaign}
-          onCreateCampaign={() => {}}
-          onSendCampaign={handleSendCampaign}
-          isCreating={isCreatingCampaign}
-          isSending={isSending}
-          campaignName={campaignName}
-          setCampaignName={setCampaignName}
-          selectedInstances={selectedInstances}
-          setSelectedInstances={setSelectedInstances}
-          selectedTemplate={selectedTemplate}
-          setSelectedTemplate={setSelectedTemplate}
-          delayRange={delayRange}
-          setDelayRange={setDelayRange}
-          instances={instances}
-          templates={templates}
-          antdContacts={antdContacts}
-          setAntdContacts={setAntdContacts}
-          recipients={recipients}
-          setRecipients={setRecipients}
-          showToast={showToast}
-        />
-
         <CampaignDetailsDialog
           open={showCampaignDetails}
           onOpenChange={handleCloseCampaignDetails}

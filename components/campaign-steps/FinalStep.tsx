@@ -17,6 +17,7 @@ interface FinalStepProps {
   delayRange: { start: number; end: number };
   templates: any[];
   instances: any[];
+  campaignId?: string; // New prop for the created campaign ID
   onSendCampaign: () => void;
   isSending: boolean;
   onClose: () => void;
@@ -47,6 +48,7 @@ export default function FinalStep({
   delayRange,
   templates,
   instances,
+  campaignId,
   onSendCampaign,
   isSending,
   onClose,
@@ -58,7 +60,7 @@ export default function FinalStep({
   const [currentPage, setCurrentPage] = useState(1);
   const [recipientsPerPage] = useState(10);
   const [campaignProgress, setCampaignProgress] = useState<CampaignProgress>({ 
-    campaignId: '', 
+    campaignId: campaignId || '', 
     total: antdContacts.length, 
     sent: 0, 
     failed: 0,
@@ -67,7 +69,7 @@ export default function FinalStep({
   });
   const [isProcessing, setIsProcessing] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
-  const [currentCampaignId, setCurrentCampaignId] = useState<string | null>(null);
+  const [currentCampaignId, setCurrentCampaignId] = useState<string | null>(campaignId || null);
   const [recipientStatuses, setRecipientStatuses] = useState<string[]>(new Array(antdContacts.length).fill('pending'));
   const [existingNumbers, setExistingNumbers] = useState(0);
   const [nonExistingNumbers, setNonExistingNumbers] = useState(0);
@@ -107,6 +109,14 @@ export default function FinalStep({
       console.error('Socket error:', error);
     }
   });
+
+  // Update campaign ID when prop changes
+  useEffect(() => {
+    if (campaignId) {
+      setCurrentCampaignId(campaignId);
+      setCampaignProgress(prev => ({ ...prev, campaignId }));
+    }
+  }, [campaignId]);
 
   // ULTRA-FAST instance monitoring with INSTANT disconnect detection
   const checkInstanceConnections = useCallback(() => {
@@ -164,7 +174,7 @@ export default function FinalStep({
       if (currentCampaignId) {
         const authToken = getToken();
         if (authToken) {
-          fetch('https://whatsapp.recuperafly.com/api/template/campaign/control', {
+          fetch('https://whatsapp.recuperafly.com/api/campaign/control', {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${authToken}`,
@@ -459,7 +469,7 @@ export default function FinalStep({
 
   const handleSendMessages = async () => {
     // Prevent multiple simultaneous requests
-    if (isLoading || isProcessing) return;
+    if (isLoading || isProcessing || !currentCampaignId) return;
 
     // Cancel any previous request
     if (abortControllerRef.current) {
@@ -487,49 +497,10 @@ export default function FinalStep({
       }
 
       const payload = {
-        name: campaignName,
-        templateId: selectedTemplate,
-        instanceIds: selectedInstances,
-        recipients: antdContacts.map(contact => ({
-          phone: contact.number,
-          name: contact.name,
-          variables: {
-            var1: contact.var1 || '',
-            var2: contact.var2 || '',
-            var3: contact.var3 || '',
-            var4: contact.var4 || '',
-            var5: contact.var5 || '',
-            var6: contact.var6 || '',
-            var7: contact.var7 || '',
-            var8: contact.var8 || '',
-            var9: contact.var9 || '',
-            var10: contact.var10 || '',
-            var11: contact.var11 || '',
-            var12: contact.var12 || '',
-            var13: contact.var13 || '',
-            var14: contact.var14 || '',
-            var15: contact.var15 || '',
-            var16: contact.var16 || '',
-            var17: contact.var17 || '',
-            var18: contact.var18 || '',
-            var19: contact.var19 || '',
-            var20: contact.var20 || '',
-            var21: contact.var21 || '',
-            var22: contact.var22 || '',
-            var23: contact.var23 || '',
-            var24: contact.var24 || '',
-            var25: contact.var25 || '',
-            var26: contact.var26 || '',
-            var27: contact.var27 || '',
-            var28: contact.var28 || '',
-            var29: contact.var29 || '',
-            var30: contact.var30 || '',
-          }
-        })),
-        delayRange,
+        campaignId: currentCampaignId
       };
 
-      const response = await fetch('https://whatsapp.recuperafly.com/api/template/send', {
+      const response = await fetch('https://whatsapp.recuperafly.com/api/campaign/send', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${authToken}`,
@@ -548,14 +519,9 @@ export default function FinalStep({
         throw new Error(result.message || 'Failed to send campaign');
       }
 
-      // Set the campaign ID for tracking
-      if (result.campaignId) {
-        setCurrentCampaignId(result.campaignId);
-      }
-
       // Initialize progress tracking
       setCampaignProgress({
-        campaignId: result.campaignId || 'unknown',
+        campaignId: currentCampaignId,
         total: antdContacts.length,
         sent: 0,
         failed: 0,
@@ -634,7 +600,7 @@ export default function FinalStep({
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
       
-      fetch('https://whatsapp.recuperafly.com/api/template/campaign/control', {
+      fetch('https://whatsapp.recuperafly.com/api/campaign/control', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${authToken}`,
@@ -767,12 +733,38 @@ export default function FinalStep({
   // Determine if resume button should be enabled - DISABLED if all instances disconnected
   const canResume = isPaused && !instancesDisconnected && getConnectedInstancesCount() > 0;
 
+  // Show campaign creation success message if campaign was just created
+  const showCampaignCreated = currentCampaignId && !campaignStarted && !isProcessing && !isPaused && !isStopped && !isCompleted;
+
   return (
     <div className="space-y-6">
       <div>
         <h3 className="text-lg font-semibold text-zinc-200 mb-2">Final Review</h3>
-        <p className="text-zinc-400 mb-6">Review your campaign details and send messages to all selected numbers.</p>
+        <p className="text-zinc-400 mb-6">
+          {showCampaignCreated 
+            ? 'Campaign created successfully! Review the details and start sending messages.'
+            : 'Review your campaign details and send messages to all selected numbers.'
+          }
+        </p>
       </div>
+
+      {/* Campaign Created Success Message */}
+      {showCampaignCreated && (
+        <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-6 mb-6">
+          <div className="flex items-center gap-3">
+            <CheckCircle className="h-8 w-8 text-green-500" />
+            <div>
+              <h3 className="text-green-400 font-semibold text-lg">Campaign Created Successfully!</h3>
+              <p className="text-green-300">
+                Campaign ID: {currentCampaignId}
+              </p>
+              <p className="text-green-200 text-sm mt-1">
+                Ready to send {antdContacts.length} messages to your recipients.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Progress Stats */}
       {(isProcessing || isPaused || isStopped || isCompleted) && (
@@ -1111,7 +1103,7 @@ export default function FinalStep({
         </div>
         
         <div className="flex gap-3">
-          {!isCompleted && !isStopped && !isProcessing && !isPaused && (
+          {!isCompleted && !isStopped && !isProcessing && !isPaused && currentCampaignId && (
             <Button
               onClick={handleSendMessages}
               disabled={isLoading || isSending}
@@ -1120,12 +1112,12 @@ export default function FinalStep({
               {isLoading || isSending ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Sending...
+                  Starting...
                 </>
               ) : (
                 <>
                   <Send className="h-4 w-4 mr-2" />
-                  Send Messages
+                  Start Campaign
                 </>
               )}
             </Button>

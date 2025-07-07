@@ -78,6 +78,7 @@ export default function CreateCampaignPage() {
   const [isCreatingCampaign, setIsCreatingCampaign] = useState(false);
   const [antdContacts, setAntdContacts] = useState<any[]>([]);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [campaignId, setCampaignId] = useState<string | null>(null);
 
   // Toast functions
   const showToast = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'success') => {
@@ -220,6 +221,10 @@ export default function CreateCampaignPage() {
         showToast('All contacts must have a valid phone number and name', 'error');
         return;
       }
+    } else if (currentStep === 4) {
+      // Create campaign when moving from step 4 to step 5
+      handleCreateCampaign();
+      return;
     }
     
     if (currentStep < 5) {
@@ -233,8 +238,9 @@ export default function CreateCampaignPage() {
     }
   };
 
-  const handleSendCampaign = async () => {
-    setIsSending(true);
+  // Create campaign function
+  const handleCreateCampaign = async () => {
+    setIsCreatingCampaign(true);
     
     try {
       const token = await getToken();
@@ -246,31 +252,99 @@ export default function CreateCampaignPage() {
       const campaignData = {
         name: campaignName,
         templateId: selectedTemplate,
-        instances: selectedInstances,
+        instanceIds: selectedInstances,
         recipients: antdContacts.map(contact => ({
           phone: contact.number,
           name: contact.name,
-          variables: { var1: '', var2: '', var3: '', var4: '', var5: '', var6: '', var7: '', var8: '', var9: '', var10: '' }
+          variables: {
+            var1: contact.var1 || '',
+            var2: contact.var2 || '',
+            var3: contact.var3 || '',
+            var4: contact.var4 || '',
+            var5: contact.var5 || '',
+            var6: contact.var6 || '',
+            var7: contact.var7 || '',
+            var8: contact.var8 || '',
+            var9: contact.var9 || '',
+            var10: contact.var10 || '',
+            var11: contact.var11 || '',
+            var12: contact.var12 || '',
+            var13: contact.var13 || '',
+            var14: contact.var14 || '',
+            var15: contact.var15 || '',
+            var16: contact.var16 || '',
+            var17: contact.var17 || '',
+            var18: contact.var18 || '',
+            var19: contact.var19 || '',
+            var20: contact.var20 || '',
+            var21: contact.var21 || '',
+            var22: contact.var22 || '',
+            var23: contact.var23 || '',
+            var24: contact.var24 || '',
+            var25: contact.var25 || '',
+            var26: contact.var26 || '',
+            var27: contact.var27 || '',
+            var28: contact.var28 || '',
+            var29: contact.var29 || '',
+            var30: contact.var30 || '',
+          }
         })),
         delayRange
       };
 
-      const response = await fetch('https://whatsapp.recuperafly.com/api/template/send', {
+      const response = await fetch('https://whatsapp.recuperafly.com/api/campaign/create', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(campaignData)
+      });
+
+      if (response.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+
+      const result = await response.json();
+      if (result.status) {
+        showToast('Campaign created successfully!', 'success');
+        setCampaignId(result.campaignId);
+        setCurrentStep(5); // Move to final step
+      } else {
+        showToast(result.message || 'Failed to create campaign', 'error');
+      }
+    } catch (error) {
+      console.error('Error creating campaign:', error);
+      showToast('Failed to create campaign. Please try again.', 'error');
+    } finally {
+      setIsCreatingCampaign(false);
+    }
+  };
+
+  const handleSendCampaign = async () => {
+    if (!campaignId) {
+      showToast('No campaign ID available', 'error');
+      return;
+    }
+
+    setIsSending(true);
+    
+    try {
+      const token = await getToken();
+      if (!token) {
+        handleUnauthorized();
+        return;
+      }
+
+      const response = await fetch('https://whatsapp.recuperafly.com/api/campaign/send', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          name: campaignName,
-          templateId: selectedTemplate,
-          instanceIds: selectedInstances,
-          recipients: antdContacts.map(contact => ({
-            phone: contact.number,
-            name: contact.name,
-            variables: { var1: '', var2: '', var3: '', var4: '', var5: '', var6: '', var7: '', var8: '', var9: '', var10: '' }
-          })),
-          delayRange
+          campaignId: campaignId
         })
       });
 
@@ -281,15 +355,13 @@ export default function CreateCampaignPage() {
 
       const result = await response.json();
       if (result.status) {
-        showToast('Campaign created and sent successfully!', 'success');
-        // Redirect to messaging page with refresh parameter
-        router.push('/dashboard/messaging?refresh=true');
+        showToast('Campaign started successfully!', 'success');
       } else {
-        showToast(result.message || 'Failed to create campaign', 'error');
+        showToast(result.message || 'Failed to start campaign', 'error');
       }
     } catch (error) {
-      console.error('Error sending campaign:', error);
-      showToast('Failed to send campaign. Please try again.', 'error');
+      console.error('Error starting campaign:', error);
+      showToast('Failed to start campaign. Please try again.', 'error');
     } finally {
       setIsSending(false);
     }
@@ -303,6 +375,7 @@ export default function CreateCampaignPage() {
     setSelectedTemplate('');
     setDelayRange({ start: 3, end: 5 });
     setAntdContacts([]);
+    setCampaignId(null);
     setRecipients([{
       phone: '',
       name: '',
@@ -351,8 +424,8 @@ export default function CreateCampaignPage() {
             delayRange={delayRange}
             setDelayRange={setDelayRange}
             templates={templates}
-            onSendCampaign={handleSendCampaign}
-            isSending={isSending}
+            onCreateCampaign={handleCreateCampaign}
+            isCreating={isCreatingCampaign}
           />
         );
       case 5:
@@ -365,6 +438,7 @@ export default function CreateCampaignPage() {
             delayRange={delayRange}
             templates={templates}
             instances={instances}
+            campaignId={campaignId}
             onSendCampaign={handleSendCampaign}
             isSending={isSending}
             onClose={handleClose}
@@ -458,10 +532,20 @@ export default function CreateCampaignPage() {
           
           <Button
             onClick={handleNext}
+            disabled={isCreatingCampaign}
             className="bg-blue-600 hover:bg-blue-700 text-white"
           >
-            Next
-            <ArrowRight className="h-4 w-4 ml-2" />
+            {currentStep === 4 && isCreatingCampaign ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                Creating...
+              </>
+            ) : (
+              <>
+                {currentStep === 4 ? 'Create Campaign' : 'Next'}
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </>
+            )}
           </Button>
         </div>
       )}

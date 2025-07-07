@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
-import { Check, ArrowLeft, ArrowRight, Home } from 'lucide-react';
+import { Check, ArrowLeft, ArrowRight, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Cookies from 'js-cookie';
 
@@ -388,77 +388,83 @@ export default function CreateCampaignPage() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-950">
+    <div className="min-h-screen bg-zinc-950 p-6">
       <ToastContainer toasts={toasts} removeToast={removeToast} />
       
-      <div className="max-w-6xl mx-auto p-6">
-        {/* Header */}
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-white">Create New Campaign</h1>
-            <p className="text-zinc-400 mt-1">Connect with your customers through WhatsApp</p>
-          </div>
+      {/* Header with Cancel Button */}
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold text-white">Create New Campaign</h1>
+          <p className="text-zinc-400 mt-1">Connect with your customers through WhatsApp</p>
         </div>
+        <Button
+          variant="outline"
+          onClick={handleClose}
+          className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
+        >
+          <X className="h-4 w-4 mr-2" />
+          Cancel
+        </Button>
+      </div>
 
-        {/* Step Indicator */}
-        <div className="flex items-center justify-between mb-8 bg-zinc-900/50 rounded-xl p-6">
-          {CAMPAIGN_STEPS.map((step, index) => (
-            <div key={step.id} className="flex items-center">
-              <div className={`flex items-center justify-center w-10 h-10 rounded-full border-2 ${
-                currentStep >= step.id 
-                  ? 'bg-blue-600 border-blue-600 text-white' 
-                  : 'border-zinc-600 text-zinc-400'
-              }`}>
-                {currentStep > step.id ? (
-                  <Check className="h-5 w-5" />
-                ) : (
-                  <span className="text-sm font-medium">{step.id}</span>
-                )}
-              </div>
-              <div className="ml-4 hidden sm:block">
-                <p className={`text-sm font-medium ${
-                  currentStep >= step.id ? 'text-zinc-200' : 'text-zinc-400'
-                }`}>
-                  {step.title}
-                </p>
-              </div>
-              {index < CAMPAIGN_STEPS.length - 1 && (
-                <div className={`hidden sm:block w-20 h-0.5 ml-6 ${
-                  currentStep > step.id ? 'bg-blue-600' : 'bg-zinc-600'
-                }`} />
+      {/* Step Indicator */}
+      <div className="flex items-center justify-between mb-8 bg-zinc-900/50 rounded-xl p-6">
+        {CAMPAIGN_STEPS.map((step, index) => (
+          <div key={step.id} className="flex items-center">
+            <div className={`flex items-center justify-center w-10 h-10 rounded-full border-2 ${
+              currentStep >= step.id 
+                ? 'bg-blue-600 border-blue-600 text-white' 
+                : 'border-zinc-600 text-zinc-400'
+            }`}>
+              {currentStep > step.id ? (
+                <Check className="h-5 w-5" />
+              ) : (
+                <span className="text-sm font-medium">{step.id}</span>
               )}
             </div>
-          ))}
-        </div>
-        
-        {/* Step Content */}
-        <div className="bg-zinc-900/50 rounded-xl p-8 min-h-[500px]">
-          {renderStepContent()}
-        </div>
-
-        {/* Navigation Buttons */}
-        {currentStep < 5 && (
-          <div className="flex justify-between items-center pt-6 mt-6 border-t border-zinc-800">
-            <Button
-              variant="outline"
-              onClick={handleBack}
-              disabled={currentStep === 1}
-              className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back
-            </Button>
-            
-            <Button
-              onClick={handleNext}
-              className="bg-zinc-800 hover:bg-zinc-700 text-white"
-            >
-              Next
-              <ArrowRight className="h-4 w-4 ml-2" />
-            </Button>
+            <div className="ml-4 hidden sm:block">
+              <p className={`text-sm font-medium ${
+                currentStep >= step.id ? 'text-zinc-200' : 'text-zinc-400'
+              }`}>
+                {step.title}
+              </p>
+            </div>
+            {index < CAMPAIGN_STEPS.length - 1 && (
+              <div className={`hidden sm:block w-20 h-0.5 ml-6 ${
+                currentStep > step.id ? 'bg-blue-600' : 'bg-zinc-600'
+              }`} />
+            )}
           </div>
-        )}
+        ))}
       </div>
+      
+      {/* Step Content */}
+      <div className="bg-zinc-900/50 rounded-xl p-8 min-h-[500px]">
+        {renderStepContent()}
+      </div>
+
+      {/* Navigation Buttons - Bottom Line */}
+      {currentStep < 5 && (
+        <div className="flex justify-between items-center mt-6">
+          <Button
+            variant="outline"
+            onClick={handleBack}
+            disabled={currentStep === 1}
+            className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700 disabled:opacity-50"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back
+          </Button>
+          
+          <Button
+            onClick={handleNext}
+            className="bg-blue-600 hover:bg-blue-700 text-white"
+          >
+            Next
+            <ArrowRight className="h-4 w-4 ml-2" />
+          </Button>
+        </div>
+      )}
     </div>
   );
-} 
+}

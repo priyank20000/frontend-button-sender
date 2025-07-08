@@ -775,7 +775,7 @@ export default function SelectAudience({
 
       <style jsx global>{`
         .table-container {
-          width: 1090px;
+          width: 1470px;
           overflow-x: auto;
         }
 

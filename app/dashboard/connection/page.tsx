@@ -18,6 +18,7 @@ import {
   CheckCircle,
   AlertCircle,
   Info,
+  ChevronDown,
 } from 'lucide-react';
 
 interface WhatsAppProfile {
@@ -73,7 +74,7 @@ export default function DevicesPage() {
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [connectedInstance, setConnectedInstance] = useState<Instance | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [instancesPerPage] = useState(9);
+  const [instancesPerPage, setInstancesPerPage] = useState(10); // Default to 10, now user-selectable
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editInstanceId, setEditInstanceId] = useState<string | null>(null);
   const [editInstanceName, setEditInstanceName] = useState('');
@@ -807,12 +808,31 @@ export default function DevicesPage() {
           </div>
         )}
 
-        {sortedInstances.length > instancesPerPage && (
+        {sortedInstances.length > 0 && (
           <div className="flex flex-col sm:flex-row justify-between items-center mt-6 sm:mt-8 bg-zinc-900 border border-zinc-800 rounded-xl p-4 gap-4">
             <div className="flex items-center gap-3">
               <span className="text-zinc-400 text-sm">
                 Showing {indexOfFirstInstance + 1}-{Math.min(indexOfLastInstance, sortedInstances.length)} of {sortedInstances.length} instances
               </span>
+              <div className="relative ml-4">
+                <label htmlFor="instances-per-page" className="sr-only">Instances per page</label>
+                <select
+                  id="instances-per-page"
+                  className="appearance-none bg-zinc-800 border border-zinc-700 text-zinc-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all pr-8 shadow-sm hover:border-emerald-400"
+                  value={instancesPerPage}
+                  onChange={e => {
+                    setInstancesPerPage(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                >
+                  {[9, 18, 27, 36, 45].map(size => (
+                    <option key={size} value={size}>{size} per page</option>
+                  ))}
+                </select>
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 flex items-center">
+                  <ChevronDown className="h-4 w-4" />
+                </span>
+              </div>
             </div>
             
             <div className="flex items-center">

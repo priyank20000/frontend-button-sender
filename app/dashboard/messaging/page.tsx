@@ -517,8 +517,7 @@ export default function MessagingPage() {
                 campaigns={campaigns}
                 isDeleting={isDeleting}
                 onViewDetails={(campaign) => {
-                  setSelectedCampaign(campaign);
-                  setShowCampaignDetails(true);
+                  router.push(`/dashboard/campaign/final/${campaign._id}`);
                 }}
                 onDelete={handleDeleteCampaign}
                 onCampaignUpdate={handleCampaignUpdate}

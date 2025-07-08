@@ -11,7 +11,6 @@ import BasicConfiguration from '../../../components/campaign-steps/BasicConfigur
 import ChooseTemplate from '../../../components/campaign-steps/ChooseTemplate';
 import SelectAudience from '../../../components/campaign-steps/SelectAudience';
 import ScheduleCampaign from '../../../components/campaign-steps/ScheduleCampaign';
-import FinalStep from '../../../components/campaign-steps/FinalStep';
 import ToastContainer from '../../../components/ToastContainer';
 
 // Types
@@ -55,8 +54,7 @@ const CAMPAIGN_STEPS = [
   { id: 1, title: 'Basic Configuration', description: '' },
   { id: 2, title: 'Choose Template', description: '' },
   { id: 3, title: 'Select Audience', description: '' },
-  { id: 4, title: 'Schedule Campaign', description: '' },
-  { id: 5, title: 'Final', description: '' }
+  { id: 4, title: 'Schedule Campaign', description: '' }
 ];
 
 export default function CreateCampaignPage() {
@@ -222,12 +220,12 @@ export default function CreateCampaignPage() {
         return;
       }
     } else if (currentStep === 4) {
-      // Create campaign when moving from step 4 to step 5
+      // Create campaign when moving from step 4
       handleCreateCampaign();
       return;
     }
     
-    if (currentStep < 5) {
+    if (currentStep < 4) {
       setCurrentStep(currentStep + 1);
     }
   };
@@ -310,7 +308,8 @@ export default function CreateCampaignPage() {
       if (result.status) {
         showToast('Campaign created successfully!', 'success');
         setCampaignId(result.campaignId);
-        setCurrentStep(5); // Move to final step
+        // Store campaignId in localStorage for ScheduleCampaign component
+        localStorage.setItem('currentCampaignId', result.campaignId);
       } else {
         showToast(result.message || 'Failed to create campaign', 'error');
       }
@@ -319,51 +318,6 @@ export default function CreateCampaignPage() {
       showToast('Failed to create campaign. Please try again.', 'error');
     } finally {
       setIsCreatingCampaign(false);
-    }
-  };
-
-  const handleSendCampaign = async () => {
-    if (!campaignId) {
-      showToast('No campaign ID available', 'error');
-      return;
-    }
-
-    setIsSending(true);
-    
-    try {
-      const token = await getToken();
-      if (!token) {
-        handleUnauthorized();
-        return;
-      }
-
-      const response = await fetch('https://whatsapp.recuperafly.com/api/campaign/send', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          campaignId: campaignId
-        })
-      });
-
-      if (response.status === 401) {
-        handleUnauthorized();
-        return;
-      }
-
-      const result = await response.json();
-      if (result.status) {
-        showToast('Campaign started successfully!', 'success');
-      } else {
-        showToast(result.message || 'Failed to start campaign', 'error');
-      }
-    } catch (error) {
-      console.error('Error starting campaign:', error);
-      showToast('Failed to start campaign. Please try again.', 'error');
-    } finally {
-      setIsSending(false);
     }
   };
 
@@ -376,6 +330,8 @@ export default function CreateCampaignPage() {
     setDelayRange({ start: 3, end: 5 });
     setAntdContacts([]);
     setCampaignId(null);
+    // Clean up localStorage
+    localStorage.removeItem('currentCampaignId');
     setRecipients([{
       phone: '',
       name: '',
@@ -426,23 +382,6 @@ export default function CreateCampaignPage() {
             templates={templates}
             onCreateCampaign={handleCreateCampaign}
             isCreating={isCreatingCampaign}
-          />
-        );
-      case 5:
-        return (
-          <FinalStep
-            campaignName={campaignName}
-            selectedTemplate={selectedTemplate}
-            selectedInstances={selectedInstances}
-            antdContacts={antdContacts}
-            delayRange={delayRange}
-            templates={templates}
-            instances={instances}
-            campaignId={campaignId}
-            onSendCampaign={handleSendCampaign}
-            isSending={isSending}
-            onClose={handleClose}
-            onBack={handleBack}
           />
         );
       default:
@@ -518,7 +457,7 @@ export default function CreateCampaignPage() {
       </div>
 
       {/* Navigation Buttons - Bottom Line */}
-      {currentStep < 5 && (
+      {currentStep < 4 && (
         <div className="flex justify-between items-center mt-6">
           <Button
             variant="outline"

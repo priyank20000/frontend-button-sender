@@ -83,7 +83,7 @@ const MessagingPage = memo(function MessagingPage() {
   const [isSending, setIsSending] = useState(false);
   const [responseDialogOpen, setResponseDialogOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [campaignsPerPage] = useState(10);
+  const [campaignsPerPage, setCampaignsPerPage] = useState(10);
   const [totalCampaigns, setTotalCampaigns] = useState(0);
   const [searchValue, setSearchValue] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -492,6 +492,23 @@ const MessagingPage = memo(function MessagingPage() {
     }
   }, [currentPage]);
 
+  // Pagination configuration for Ant Design
+  const paginationConfig = {
+    current: currentPage,
+    pageSize: campaignsPerPage,
+    total: totalCampaigns,
+    onChange: (page: number, pageSize?: number) => {
+      setCurrentPage(page);
+      if (pageSize && pageSize !== campaignsPerPage) {
+        setCampaignsPerPage(pageSize);
+      }
+    },
+    showSizeChanger: true,
+    showQuickJumper: true,
+    showTotal: (total: number, range: [number, number]) => 
+      `Showing ${range[0]}-${range[1]} of ${total} campaigns`,
+  };
+
   // Don't render until mounted to prevent hydration issues
   if (!mounted) {
     return (
@@ -574,6 +591,8 @@ const MessagingPage = memo(function MessagingPage() {
               <CampaignTable
                 campaigns={campaigns}
                 isDeleting={isDeleting}
+                loading={isLoading}
+                pagination={paginationConfig}
                 onViewDetails={(campaign) => {
                   router.push(`/dashboard/campaign/final/${campaign._id}`);
                 }}
@@ -582,63 +601,6 @@ const MessagingPage = memo(function MessagingPage() {
               />
             )}
           </CardContent>
-          
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <CardFooter className="flex flex-col sm:flex-row justify-between items-center mt-6 sm:mt-8 bg-zinc-900 border border-zinc-800 rounded-xl p-4 gap-4">
-              <div className="flex items-center gap-3">
-                <span className="text-zinc-400 text-sm">
-                  Showing {(currentPage - 1) * campaignsPerPage + 1}-
-                  {Math.min(currentPage * campaignsPerPage, totalCampaigns)} of {totalCampaigns} campaigns
-                </span>
-              </div>
-
-              <div className="flex items-center">
-                <button
-                  onClick={handlePrevPage}
-                  disabled={currentPage === 1}
-                  className={`h-9 w-9 rounded-full transition-all duration-200 flex items-center justify-center ${
-                    currentPage === 1
-                      ? 'text-zinc-600 cursor-not-allowed'
-                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
-                  }`}
-                  aria-label="Previous page"
-                >
-                  <ChevronLeft className="h-5 w-5" />
-                </button>
-
-                <div className="flex items-center gap-1 px-2">
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                    <button
-                      key={page}
-                      onClick={() => setCurrentPage(page)}
-                      className={`h-9 w-9 rounded-full transition-all duration-200 ${
-                        currentPage === page
-                          ? 'bg-zinc-800 text-white hover:bg-zinc-700'
-                          : 'bg-transparent hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200'
-                      }`}
-                      aria-label={`Page ${page}`}
-                    >
-                      {page}
-                    </button>
-                  ))}
-                </div>
-
-                <button
-                  onClick={handleNextPage}
-                  disabled={currentPage === totalPages}
-                  className={`h-9 w-9 rounded-full transition-all duration-200 flex items-center justify-center ${
-                    currentPage === totalPages
-                      ? 'text-zinc-600 cursor-not-allowed'
-                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
-                  }`}
-                  aria-label="Next page"
-                >
-                  <ChevronRight className="h-5 w-5" />
-                </button>
-              </div>
-            </CardFooter>
-          )}
         </Card>
       </div>
     </div>

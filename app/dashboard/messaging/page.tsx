@@ -218,7 +218,7 @@ const MessagingPage = memo(function MessagingPage() {
     }
 
     try {
-      const campaignResponse = await fetch('https://whatsapp.recuperafly.com/api/campaign/all', {
+      const campaignResponse = await fetch('https://whatsapp.recuperafly.com/api/template/message/all', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

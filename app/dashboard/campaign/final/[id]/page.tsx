@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Loader2, Users, CheckCircle, XCircle, AlertTriangle, Wifi, WifiOff, StopCircle, Pause, Play, RefreshCw, ChevronLeft, ChevronRight, Badge } from "lucide-react";
+import { Loader2, Users, CheckCircle, XCircle, AlertTriangle, Wifi, WifiOff, StopCircle, Pause, Play, RefreshCw, ChevronLeft, ChevronRight, Badge, Download } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCampaignRealtime } from "@/hooks/useCampaignRealtime";
@@ -36,6 +36,76 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
 
   const recipientsPerPage = 10;
   const [currentPage, setCurrentPage] = React.useState(1);
+  const [isDownloadingExcel, setIsDownloadingExcel] = React.useState(false);
+
+  // Get token function
+  const getToken = (): string | null => {
+    const cookieToken = document.cookie
+      .split('; ')
+      .find(row => row.startsWith('token='))
+      ?.split('=')[1];
+    
+    if (cookieToken) {
+      return cookieToken;
+    }
+    
+    const localToken = localStorage.getItem('token');
+    if (localToken) {
+      return localToken;
+    }
+
+    return null;
+  };
+
+  // Handle Excel download
+  const handleDownloadExcel = async () => {
+    const token = getToken();
+    if (!token) {
+      console.error('No token available');
+      return;
+    }
+
+    setIsDownloadingExcel(true);
+    try {
+      const response = await fetch('https://whatsapp.recuperafly.com/api/template/xcel', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          campaignId: campaignId
+        })
+      });
+
+      if (response.ok) {
+        // Get the blob from response
+        const blob = await response.blob();
+        
+        // Create download link
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `campaign-${campaignId}-report.xlsx`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      } else {
+        console.error('Failed to download Excel file');
+      }
+    } catch (error) {
+      console.error('Error downloading Excel:', error);
+    } finally {
+      setIsDownloadingExcel(false);
+    }
+  };
+
+  // Modified handleStopCampaign to prevent status changes
+  const handleStopCampaignModified = () => {
+    // Call the original stop function but don't update recipient statuses
+    handleStopCampaign();
+  };
 
   if (isLoading) {
     return (
@@ -133,7 +203,7 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
                   {controlStates.isPausing ? 'Pausing...' : 'Pause'}
                 </Button>
                 <Button
-                  onClick={handleStopCampaign}
+                  onClick={handleStopCampaignModified}
                   disabled={controlStates.isStopping}
                   variant="outline"
                   size="sm"
@@ -162,7 +232,7 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
                    !canResume ? 'Waiting for Connection' : 'Resume'}
                 </Button>
                 <Button
-                  onClick={handleStopCampaign}
+                  onClick={handleStopCampaignModified}
                   disabled={controlStates.isStopping}
                   variant="outline"
                   size="sm"
@@ -178,6 +248,23 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
                 <StopCircle className="h-4 w-4" />
                 Campaign Stopped
               </div>
+            )}
+            {/* Download Excel Button - Show when paused or stopped */}
+            {(isPaused || isStopped) && (
+              <Button
+                onClick={handleDownloadExcel}
+                disabled={isDownloadingExcel}
+                variant="outline"
+                size="sm"
+                className="bg-green-600/20 border-green-500 text-green-400 hover:bg-green-600/30 transition-all duration-75"
+              >
+                {isDownloadingExcel ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4 mr-2" />
+                )}
+                {isDownloadingExcel ? 'Downloading...' : 'Download Excel'}
+              </Button>
             )}
             <Button
               onClick={refreshCampaignDetails}
@@ -477,4 +564,4 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
       </div>
     </div>
   );
-} 
+}

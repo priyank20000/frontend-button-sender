@@ -3,8 +3,7 @@
 import { useRouter } from "next/navigation";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Loader2, Users, CheckCircle, XCircle, AlertTriangle, Wifi, WifiOff, StopCircle, Pause, Play, RefreshCw, ChevronLeft, ChevronRight, Download } from "lucide-react";
+import { Loader2, Users, CheckCircle, XCircle, AlertTriangle, Wifi, WifiOff, StopCircle, Pause, Play, RefreshCw, ChevronLeft, ChevronRight, Badge, Download } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCampaignRealtime } from "@/hooks/useCampaignRealtime";
@@ -218,9 +217,8 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
   // Ensure total messages count is always available
   const totalMessages = campaign.totalMessages || campaign.recipients?.length || 0;
 
-  // Show download button when campaign is paused, stopped, completed, or has some progress
-  const showDownloadButton = (isPaused || isStopped || campaign?.status === 'completed') || 
-    (!isProcessing && (sentCount > 0 || failedCount > 0 || notExistCount > 0));
+  // Show download button when campaign is paused, stopped, or completed
+  const showDownloadButton = isPaused || isStopped || (!isProcessing && (sentCount > 0 || failedCount > 0 || notExistCount > 0));
 
   return (
     <div className="min-h-screen bg-zinc-950 p-6">
@@ -295,18 +293,6 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
                 Campaign Stopped
               </div>
             )}
-            {campaign?.status === 'pending' && (
-              <Button
-                onClick={handleStartCampaign}
-                disabled={isStarting}
-                variant="outline"
-                size="sm"
-                className="bg-blue-600/20 border-blue-500 text-blue-400 hover:bg-blue-600/30"
-                type="button"
-              >
-                {isStarting ? 'Starting...' : 'Start'}
-              </Button>
-            )}
             {/* Download Excel Button - Always show when campaign has progress or is completed */}
             {showDownloadButton && (
               <Button
@@ -336,6 +322,18 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
               <RefreshCw className={`h-4 w-4 mr-2 ${(isRefreshing || isLoading) ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
+            {campaign.status === 'pending' && (
+              <Button
+                onClick={handleStartCampaign}
+                disabled={isStarting}
+                variant="outline"
+                size="sm"
+                className="bg-blue-600/20 border-blue-500 text-blue-400 hover:bg-blue-600/30"
+                type="button"
+              >
+                {isStarting ? 'Starting...' : 'Start'}
+              </Button>
+            )}
             <Button 
               variant="outline" 
               onClick={() => router.push('/dashboard/messaging')}

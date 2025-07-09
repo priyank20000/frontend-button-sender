@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Eye, Trash2, Loader2, CheckCircle, XCircle, Clock, RefreshCw, StopCircle, Pause, Play } from 'lucide-react';
-import { memo, useEffect, useState, useCallback } from 'react';
+import { memo, useState, useCallback } from 'react';
 import Cookies from 'js-cookie';
 
 interface Campaign {
@@ -139,110 +139,10 @@ const CampaignRow = memo(({
           <Icon className="h-3 w-3" />
           {statusInfo.label}
         </Badge>
-        {status === 'processing' && (
-          <div className="flex gap-1">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleCampaignControl('pause')}
-                    disabled={isControlling}
-                    className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 h-6 w-6 p-0"
-                  >
-                    {isControlling ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <Pause className="h-3 w-3" />
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Pause Campaign</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleCampaignControl('stop')}
-                    disabled={isControlling}
-                    className="text-zinc-400 hover:text-red-400 hover:bg-red-500/10 h-6 w-6 p-0"
-                  >
-                    {isControlling ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <StopCircle className="h-3 w-3" />
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Stop Campaign</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-        )}
-        {status === 'paused' && (
-          <div className="flex gap-1">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleCampaignControl('resume')}
-                    disabled={isControlling}
-                    className="text-zinc-400 hover:text-green-400 hover:bg-green-500/10 h-6 w-6 p-0"
-                  >
-                    {isControlling ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <Play className="h-3 w-3" />
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Resume Campaign</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleCampaignControl('stop')}
-                    disabled={isControlling}
-                    className="text-zinc-400 hover:text-red-400 hover:bg-red-500/10 h-6 w-6 p-0"
-                  >
-                    {isControlling ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <StopCircle className="h-3 w-3" />
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Stop Campaign</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-        )}
       </div>
     );
   };
 
-  const getProgressPercentage = () => {
-    if (campaign.totalMessages === 0) return 0;
-    return Math.round(((campaign.sentMessages + campaign.failedMessages) / campaign.totalMessages) * 100);
-  };
 
   return (
     <TableRow className="border-zinc-800 hover:bg-zinc-800/30 transition-colors">
@@ -251,26 +151,21 @@ const CampaignRow = memo(({
           <p className="text-zinc-200 font-medium truncate max-w-[200px]" title={campaign.name}>
             {campaign.name}
           </p>
-          <p className="text-zinc-400 text-xs">ID: {campaign._id.slice(-8)}</p>
+          <p className="text-zinc-400 text-xs">ID: {campaign._id ? campaign._id.slice(-8) : 'N/A'}</p>
         </div>
       </TableCell>
       <TableCell>
         <div>
-          <p className="text-zinc-200 truncate max-w-[150px]" title={campaign.template.name}>
-            {campaign.template.name}
+          <p className="text-zinc-200 truncate max-w-[150px]" title={campaign.template?.name || 'No Template'}>
+            {campaign.template?.name || 'No Template'}
           </p>
-          <p className="text-zinc-400 text-xs">{campaign.template.messageType}</p>
+          <p className="text-zinc-400 text-xs">{campaign.template?.messageType || 'Text'}</p>
         </div>
       </TableCell>
       <TableCell className="text-zinc-200">{campaign.instanceCount}</TableCell>
       <TableCell>
         <div className="flex flex-col gap-1">
           {getStatusBadge(campaign.status)}
-          {campaign.status === 'processing' && (
-            <div className="text-xs text-zinc-400">
-              {campaign.sentMessages}/{campaign.totalMessages} ({getProgressPercentage()}%)
-            </div>
-          )}
         </div>
       </TableCell>
       <TableCell className="text-zinc-400 text-sm">{formatDate(campaign.createdAt)}</TableCell>
@@ -323,7 +218,7 @@ const CampaignRow = memo(({
 
 CampaignRow.displayName = 'CampaignRow';
 
-export default function CampaignTable({
+const CampaignTable = memo(function CampaignTable({
   campaigns,
   isDeleting,
   onViewDetails,
@@ -358,4 +253,6 @@ export default function CampaignTable({
       </Table>
     </div>
   );
-}
+});
+
+export default CampaignTable;

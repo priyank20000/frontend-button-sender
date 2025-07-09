@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, memo } from 'react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, MessageSquare, Loader2, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
@@ -74,7 +74,7 @@ interface ToastMessage {
   timestamp: number;
 }
 
-export default function MessagingPage() {
+const MessagingPage = memo(function MessagingPage() {
   // State
   const [templates, setTemplates] = useState<Template[]>([]);
   const [instances, setInstances] = useState<Instance[]>([]);
@@ -275,14 +275,20 @@ export default function MessagingPage() {
       }
 
       const campaignData = await campaignResponse.json();
+      
       if (campaignData.status) {
-        const mappedCampaigns: Campaign[] = campaignData.messages.map((msg: any) => ({
+        const mappedCampaigns: Campaign[] = campaignData.messages
+          .filter((msg: any) => {
+            // Optimized filtering - only essential checks
+            return msg && msg._id && msg.name && msg.templateId;
+          })
+          .map((msg: any) => ({
           _id: msg._id,
           name: msg.name,
           template: {
-            _id: msg.templateId?._id || msg.templateId,
-            name: msg.templateId?.name || 'Unknown Template',
-            messageType: msg.templateId?.messageType || 'Text',
+            _id: typeof msg.templateId === 'object' ? msg.templateId._id : msg.templateId,
+              name: typeof msg.templateId === 'object' ? msg.templateId.name : 'Loading...',
+            messageType: typeof msg.templateId === 'object' ? msg.templateId.messageType : 'Text',
           },
           // Only store the count of instanceIds
           instanceCount: (msg.instanceIds || []).length,
@@ -300,10 +306,10 @@ export default function MessagingPage() {
         }));
 
         setCampaigns(mappedCampaigns);
-        setTotalCampaigns(campaignData.total || 0);
+        setTotalCampaigns(mappedCampaigns.length);
 
         const stats = {
-          total: campaignData.total || 0,
+          total: mappedCampaigns.length,
           completed: mappedCampaigns.filter(c => c.status === 'completed').length,
           failed: mappedCampaigns.filter(c => c.status === 'failed').length,
           processing: mappedCampaigns.filter(c => c.status === 'processing').length,
@@ -314,7 +320,6 @@ export default function MessagingPage() {
         showToast(campaignData.message || 'Failed to fetch campaigns', 'error');
       }
     } catch (err) {
-      console.error('Error fetching data:', err);
       showToast('Error fetching data: ' + (err instanceof Error ? err.message : 'Unknown error'), 'error');
     } finally {
       if (showLoader) {
@@ -638,4 +643,6 @@ export default function MessagingPage() {
       </div>
     </div>
   );
-}
+});
+
+export default MessagingPage;

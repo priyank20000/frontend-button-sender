@@ -38,7 +38,9 @@ interface ToastMessage {
   timestamp: number;
 }
 
-export default function Templates() {
+import { memo } from 'react';
+
+const Templates = memo(function Templates() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [templateName, setTemplateName] = useState('');
   const [messageType, setMessageType] = useState('');
@@ -468,4 +470,6 @@ export default function Templates() {
       </div>
     </div>
   );
-}
+});
+
+export default Templates;

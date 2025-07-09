@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import { Button } from "@/components/ui/button";
 import { Check, ArrowLeft, ArrowRight, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -57,7 +57,7 @@ const CAMPAIGN_STEPS = [
   { id: 4, title: 'Schedule Campaign', description: '' }
 ];
 
-export default function CreateCampaignPage() {
+const CreateCampaignPage = memo(function CreateCampaignPage() {
   const router = useRouter();
   
   // State
@@ -490,4 +490,6 @@ export default function CreateCampaignPage() {
       )}
     </div>
   );
-}
+});
+
+export default CreateCampaignPage;

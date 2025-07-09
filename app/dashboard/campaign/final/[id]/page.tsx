@@ -411,36 +411,6 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
           </div>
         )}
 
-        {isPaused && (
-          <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-6">
-            <h4 className="text-lg font-semibold text-white mb-4">Adjust Delay Configuration</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label className="text-zinc-400">Start Delay (seconds)</Label>
-                <Input
-                  type="number"
-                  value={delayRange.start}
-                  onChange={(e) => setDelayRange({ ...delayRange, start: parseInt(e.target.value) || 1 })}
-                  className="bg-zinc-800 border-zinc-700 text-zinc-200"
-                  min="1"
-                  disabled={!canResume}
-                />
-              </div>
-              <div>
-                <Label className="text-zinc-400">End Delay (seconds)</Label>
-                <Input
-                  type="number"
-                  value={delayRange.end}
-                  onChange={(e) => setDelayRange({ ...delayRange, end: parseInt(e.target.value) || 1 })}
-                  className="bg-zinc-800 border-zinc-700 text-zinc-200"
-                  min="1"
-                  disabled={!canResume}
-                />
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Stats Cards - Always show total messages */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4">
@@ -565,7 +535,7 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
                 <span className="text-zinc-400 text-sm">
                   Showing {indexOfFirstRecipient + 1}-{Math.min(indexOfLastRecipient, totalRecipients)} of {totalRecipients} recipients
                   {statusFilter !== 'all' && (
-                    <Badge variant="outline" className="ml-2 text-zinc-300">
+                    <Badge className="ml-2 text-zinc-300 border border-zinc-600 bg-zinc-800">
                       {statusFilter === 'sent' && 'Sent'}
                       {statusFilter === 'failed' && 'Failed'}
                       {statusFilter === 'not_exist' && 'Error'}

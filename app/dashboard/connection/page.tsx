@@ -66,7 +66,9 @@ interface ToastMessage {
   timestamp: number;
 }
 
-export default function DevicesPage() {
+import { memo } from 'react';
+
+const DevicesPage = memo(function DevicesPage() {
   const [instances, setInstances] = useState<Instance[]>([]);
   const [showQR, setShowQR] = useState(false);
   const [qrCode, setQrCode] = useState('');
@@ -1082,4 +1084,6 @@ export default function DevicesPage() {
       </div>
     </div>
   );
-}
+});
+
+export default DevicesPage;

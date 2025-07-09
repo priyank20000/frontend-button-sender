@@ -14,7 +14,9 @@ interface CampaignFiltersProps {
   onRefresh: () => void;
 }
 
-export default function CampaignFilters({
+import { memo } from 'react';
+
+const CampaignFilters = memo(function CampaignFilters({
   searchValue,
   setSearchValue,
   statusFilter,
@@ -58,4 +60,6 @@ export default function CampaignFilters({
       </CardContent>
     </Card>
   );
-}
+});
+
+export default CampaignFilters;

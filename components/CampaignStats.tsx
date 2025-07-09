@@ -11,7 +11,9 @@ interface CampaignStatsProps {
   };
 }
 
-export default function CampaignStats({ stats }: CampaignStatsProps) {
+import { memo } from 'react';
+
+const CampaignStats = memo(function CampaignStats({ stats }: CampaignStatsProps) {
   return (
  <div className="flex flex-col sm:flex-row justify-between items-center gap-6 py-4">
   {/* Total Card */}
@@ -54,4 +56,6 @@ export default function CampaignStats({ stats }: CampaignStatsProps) {
   </Card>
 </div>
   );
-}
+});
+
+export default CampaignStats;

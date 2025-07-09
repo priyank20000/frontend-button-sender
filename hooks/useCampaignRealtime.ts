@@ -53,7 +53,7 @@ export function useCampaignRealtime(campaignId: string) {
   // --- Socket ---
   const { on, off, isConnected: socketConnected } = useSocket({
     token,
-    onConnect: () => {},
+    onConnect: () => {}, // Keep empty for performance
     onDisconnect: () => {},
     onError: () => {},
   });
@@ -250,14 +250,12 @@ export function useCampaignRealtime(campaignId: string) {
       if (!campaign || data.campaignId !== campaign._id) return;
 
       const now = Date.now();
-      if (now - lastProgressUpdateRef.current < 500) return;
+      if (now - lastProgressUpdateRef.current < 1000) return; // Reduced update frequency
       lastProgressUpdateRef.current = now;
 
-      console.log('Campaign progress update:', data);
 
       // Ignore progress updates during control actions to prevent state conflicts
       if (controlStates.isStopping || controlStates.isPausing || controlStates.isResuming) {
-        console.log('Ignoring progress update during control action');
         return;
       }
 

@@ -29,15 +29,16 @@ const sidebarLinks = [
     icon: Smartphone
   },
   {
+    title: 'Campaign',
+    href: '/dashboard/campaign',
+    icon: Plus
+  },
+  {
     title: 'Messaging',
     href: '/dashboard/messaging',
     icon: MessageSquare
   },
-  {
-    title: 'Create Campaign',
-    href: '/dashboard/campaign',
-    icon: Plus
-  },
+  
   {
     title: 'Templates',
     href: '/dashboard/templates',

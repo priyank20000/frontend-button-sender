@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, memo } from 'react';
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, MessageSquare, Loader2, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import Cookies from 'js-cookie';
@@ -52,7 +52,7 @@ interface Campaign {
   };
   instanceCount: number;
   recipients: Recipient[];
-  status: 'completed' | 'failed' | 'processing' | 'paused' | 'stopped';
+  status: 'completed' | 'failed' | 'processing' | 'paused' | 'stopped' | 'pending';
   totalMessages: number;
   sentMessages: number;
   failedMessages: number;
@@ -78,7 +78,7 @@ const MessagingPage = memo(function MessagingPage() {
   // State
   const [templates, setTemplates] = useState<Template[]>([]);
   const [instances, setInstances] = useState<Instance[]>([]);
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]); // Explicitly empty initial state
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [responseDialogOpen, setResponseDialogOpen] = useState(false);
@@ -105,7 +105,7 @@ const MessagingPage = memo(function MessagingPage() {
   // Memoized token to prevent unnecessary re-renders
   const token = useMemo(() => {
     if (!mounted) return null;
-    return Cookies.get('token') || localStorage.getItem('token');
+    return Cookies.get('token') || null; // Use only Cookies for consistency
   }, [mounted]);
 
   const { on, off, isConnected } = useSocket({ token });
@@ -118,16 +118,13 @@ const MessagingPage = memo(function MessagingPage() {
   // Check if we need to refresh data (coming from campaign completion)
   useEffect(() => {
     if (!mounted) return;
-    
+
     const urlParams = new URLSearchParams(window.location.search);
     const shouldRefresh = urlParams.get('refresh');
-    
+
     if (shouldRefresh === 'true') {
-      // Remove the refresh parameter from URL
       const newUrl = window.location.pathname;
       window.history.replaceState({}, '', newUrl);
-      
-      // Force refresh the data
       fetchData();
     }
   }, [mounted]);
@@ -135,18 +132,9 @@ const MessagingPage = memo(function MessagingPage() {
   // Toast functions
   const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' | 'warning' = 'success') => {
     const id = Date.now().toString();
-    const newToast: ToastMessage = {
-      id,
-      message,
-      type,
-      timestamp: Date.now()
-    };
-    
+    const newToast: ToastMessage = { id, message, type, timestamp: Date.now() };
     setToasts(prev => [...prev, newToast]);
-    
-    setTimeout(() => {
-      removeToast(id);
-    }, 5000);
+    setTimeout(() => removeToast(id), 5000);
   }, []);
 
   const removeToast = useCallback((id: string) => {
@@ -154,28 +142,17 @@ const MessagingPage = memo(function MessagingPage() {
   }, []);
 
   // Utility functions
-  const getToken = useCallback(async (): Promise<string | null | undefined> => {
+  const getToken = useCallback(async (): Promise<string | null> => {
     if (!mounted) return null;
-    
-    let token: string | null | undefined = Cookies.get('token');
-    if (!token) {
-      token = localStorage.getItem('token');
-    }
-    if (!token) {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      token = Cookies.get('token') || localStorage.getItem('token');
-    }
-    return token;
+    return Cookies.get('token') || null;
   }, [mounted]);
 
   const handleUnauthorized = useCallback(() => {
     showToast('Session expired. Please log in again.', 'error');
     if (mounted) {
       Cookies.remove('token', { path: '/', secure: window.location.protocol === 'https:', sameSite: 'Lax' });
-      localStorage.removeItem('token');
-      Cookies.remove('user', { path: '/', secure: window.location.protocol === 'https:', sameSite: 'Lax' });
-      localStorage.removeItem('user');
     }
+    setCampaigns([]); // Clear campaigns on unauthorized access
     router.push('/');
   }, [mounted, router, showToast]);
 
@@ -183,20 +160,16 @@ const MessagingPage = memo(function MessagingPage() {
   const handleCampaignUpdate = useCallback((updatedCampaign: Campaign) => {
     setCampaigns(prev => {
       const existingIndex = prev.findIndex(campaign => campaign._id === updatedCampaign._id);
-      
-      let newCampaigns;
+      let newCampaigns = prev.filter(c => c._id); // Filter out any null/undefined entries
       if (existingIndex !== -1) {
-        // Update existing campaign
-        newCampaigns = prev.map(campaign => 
+        newCampaigns = newCampaigns.map(campaign =>
           campaign._id === updatedCampaign._id ? updatedCampaign : campaign
         );
       } else {
-        // Add new campaign at the beginning
-        newCampaigns = [updatedCampaign, ...prev];
+        newCampaigns = [updatedCampaign, ...newCampaigns];
         setTotalCampaigns(prevTotal => prevTotal + 1);
       }
 
-      // Update stats with the new campaigns list
       setCampaignStats(prevStats => ({
         total: newCampaigns.length,
         completed: newCampaigns.filter(c => c.status === 'completed').length,
@@ -204,10 +177,10 @@ const MessagingPage = memo(function MessagingPage() {
         processing: newCampaigns.filter(c => c.status === 'processing').length,
       }));
 
+      console.log('Updated Campaigns:', newCampaigns); // Debug log
       return newCampaigns;
     });
 
-    // Update selected campaign if it's the one being viewed
     if (selectedCampaign && selectedCampaign._id === updatedCampaign._id) {
       setSelectedCampaign(updatedCampaign);
     }
@@ -216,46 +189,36 @@ const MessagingPage = memo(function MessagingPage() {
   // Add new campaign to the list immediately
   const addNewCampaign = useCallback((newCampaign: Campaign) => {
     setCampaigns(prev => {
-      // Check if campaign already exists
       const exists = prev.some(campaign => campaign._id === newCampaign._id);
-      if (exists) {
-        return prev;
-      }
-      
-      // Add new campaign at the beginning
-      const newCampaigns = [newCampaign, ...prev];
-      
-      // Update total count
+      if (exists) return prev;
+
+      const newCampaigns = [newCampaign, ...prev.filter(c => c._id)]; // Filter out null/undefined
       setTotalCampaigns(prevTotal => prevTotal + 1);
-      
-      // Update stats
       setCampaignStats(prevStats => ({
         total: prevStats.total + 1,
         completed: newCampaigns.filter(c => c.status === 'completed').length,
         failed: newCampaigns.filter(c => c.status === 'failed').length,
         processing: newCampaigns.filter(c => c.status === 'processing').length,
       }));
-      
       return newCampaigns;
     });
   }, []);
 
   const fetchData = useCallback(async (showLoader = true) => {
     if (!mounted) return;
-    
+
     const token = await getToken();
     if (!token) {
-      router.push('/');
+      handleUnauthorized();
       return;
     }
-  
+
     if (showLoader) {
       setIsLoading(true);
     }
-  
+
     try {
-      // Fetch campaigns
-      const campaignResponse = await fetch('https://whatsapp.recuperafly.com/api/template/message/all', {
+      const campaignResponse = await fetch('https://whatsapp.recuperafly.com/api/campaign/all', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -275,52 +238,50 @@ const MessagingPage = memo(function MessagingPage() {
       }
 
       const campaignData = await campaignResponse.json();
-      
+      console.log('API Response:', campaignData); // Debug log
+
       if (campaignData.status) {
-        const mappedCampaigns: Campaign[] = campaignData.messages
+        const mappedCampaigns: Campaign[] = (campaignData.messages || [])
           .filter((msg: any) => {
-            // Optimized filtering - only essential checks
-            return msg && msg._id && msg.name && msg.templateId;
+            // Strict validation to reject invalid campaigns
+            return msg && typeof msg === 'object' && msg._id && typeof msg._id === 'string' &&
+                   msg.name && typeof msg.name === 'string' &&
+                   msg.templateId && typeof msg.templateId === 'object' && msg.templateId._id && typeof msg.templateId._id === 'string' &&
+                   msg.createdAt && !isNaN(Date.parse(msg.createdAt));
           })
           .map((msg: any) => ({
-          _id: msg._id,
-          name: msg.name,
-          template: {
-            _id: typeof msg.templateId === 'object' ? msg.templateId._id : msg.templateId,
-              name: typeof msg.templateId === 'object' ? msg.templateId.name : 'Loading...',
-            messageType: typeof msg.templateId === 'object' ? msg.templateId.messageType : 'Text',
-          },
-          // Only store the count of instanceIds
-          instanceCount: (msg.instanceIds || []).length,
-          recipients: (msg.recipients || []).map((rec: any) => ({
-            phone: rec.phone,
-            name: rec.name,
-            variables: rec.variables || {},
-          })),
-          status: msg.status,
-          totalMessages: msg.statistics?.total || msg.recipients?.length || 0,
-          sentMessages: msg.statistics?.sent || 0,
-          failedMessages: msg.statistics?.failed || 0,
-          createdAt: msg.createdAt,
-          delayRange: msg.delayRange || { start: 3, end: 5 },
-        }));
+            _id: msg._id,
+            name: msg.name,
+            template: {
+              _id: msg.templateId._id,
+              name: msg.templateId.name || 'Loading...',
+              messageType: msg.templateId.messageType || 'Text',
+            },
+            instanceCount: (msg.instanceIds || []).length,
+            recipients: (msg.recipients || []).map((rec: any) => ({
+              phone: rec.phone,
+              name: rec.name,
+              variables: rec.variables || {},
+            })),
+            status: msg.status,
+            totalMessages: msg.statistics?.total || msg.recipients?.length || 0,
+            sentMessages: msg.statistics?.sent || 0,
+            failedMessages: msg.statistics?.failed || 0,
+            createdAt: msg.createdAt,
+            delayRange: msg.delayRange || { start: 3, end: 5 },
+          }));
 
-        setCampaigns(mappedCampaigns);
-        setTotalCampaigns(mappedCampaigns.length);
-
-        const stats = {
-          total: mappedCampaigns.length,
-          completed: mappedCampaigns.filter(c => c.status === 'completed').length,
-          failed: mappedCampaigns.filter(c => c.status === 'failed').length,
-          processing: mappedCampaigns.filter(c => c.status === 'processing').length,
-        };
-
-        setCampaignStats(stats);
+        setCampaigns(mappedCampaigns); // Only set valid campaigns
+        setTotalCampaigns(campaignData.total || mappedCampaigns.length); // Use API total or mapped length
       } else {
         showToast(campaignData.message || 'Failed to fetch campaigns', 'error');
+        setCampaigns([]); // Clear campaigns on failure
+        setTotalCampaigns(0);
       }
     } catch (err) {
       showToast('Error fetching data: ' + (err instanceof Error ? err.message : 'Unknown error'), 'error');
+      setCampaigns([]); // Clear campaigns on error
+      setTotalCampaigns(0);
     } finally {
       if (showLoader) {
         setIsLoading(false);
@@ -335,16 +296,16 @@ const MessagingPage = memo(function MessagingPage() {
     }
   }, [mounted, token, fetchData]);
 
-  // Auto-refresh data every 30 seconds when there are processing campaigns
+  // Auto-refresh data every 15 seconds when there are processing campaigns
   useEffect(() => {
     if (!mounted) return;
-    
+
     const hasProcessingCampaigns = campaigns.some(campaign => campaign.status === 'processing');
-    
+
     if (hasProcessingCampaigns) {
       const interval = setInterval(() => {
-        fetchData(false); // Don't show loader for auto-refresh
-      }, 15000); // Refresh every 15 seconds for better UX
+        fetchData(false);
+      }, 15000);
 
       return () => clearInterval(interval);
     }
@@ -354,43 +315,54 @@ const MessagingPage = memo(function MessagingPage() {
     if (!mounted || !isConnected) return;
 
     const handleCampaignProgress = (data: any) => {
-      handleCampaignUpdate({
-        ...data.campaign,
-        status: data.status,
-        sentMessages: data.sent || 0,
-        failedMessages: data.failed || 0,
-        totalMessages: data.total || 0,
-      });
+      console.log('WebSocket Progress:', data); // Debug log
+      if (data.campaign && data.campaign._id) { // Safeguard against invalid data
+        handleCampaignUpdate({
+          ...data.campaign,
+          status: data.status,
+          sentMessages: data.sent || 0,
+          failedMessages: data.failed || 0,
+          totalMessages: data.total || 0,
+        });
+      }
     };
 
     const handleCampaignComplete = (data: any) => {
-      handleCampaignUpdate({
-        ...data.campaign,
-        status: 'completed',
-        sentMessages: data.sent || 0,
-        failedMessages: data.failed || 0,
-      });
+      if (data.campaign && data.campaign._id) {
+        handleCampaignUpdate({
+          ...data.campaign,
+          status: 'completed',
+          sentMessages: data.sent || 0,
+          failedMessages: data.failed || 0,
+        });
+      }
     };
 
     const handleCampaignStopped = (data: any) => {
-      handleCampaignUpdate({
-        ...data.campaign,
-        status: 'stopped',
-      });
+      if (data.campaign && data.campaign._id) {
+        handleCampaignUpdate({
+          ...data.campaign,
+          status: 'stopped',
+        });
+      }
     };
 
     const handleCampaignPaused = (data: any) => {
-      handleCampaignUpdate({
-        ...data.campaign,
-        status: 'paused',
-      });
+      if (data.campaign && data.campaign._id) {
+        handleCampaignUpdate({
+          ...data.campaign,
+          status: 'paused',
+        });
+      }
     };
 
     const handleCampaignResumed = (data: any) => {
-      handleCampaignUpdate({
-        ...data.campaign,
-        status: 'processing',
-      });
+      if (data.campaign && data.campaign._id) {
+        handleCampaignUpdate({
+          ...data.campaign,
+          status: 'processing',
+        });
+      }
     };
 
     on('campaign.progress', handleCampaignProgress);
@@ -414,10 +386,10 @@ const MessagingPage = memo(function MessagingPage() {
     await fetchData(false);
   }, [fetchData]);
 
-  // Campaign operations - Updated delete function to use correct API endpoint
+  // Campaign operations
   const handleDeleteCampaign = useCallback(async (campaignId: string) => {
     setIsDeleting(prev => ({ ...prev, [campaignId]: true }));
-    
+
     try {
       const token = await getToken();
       if (!token) {
@@ -431,9 +403,7 @@ const MessagingPage = memo(function MessagingPage() {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ 
-          campaignId: campaignId 
-        })
+        body: JSON.stringify({ campaignId })
       });
 
       if (response.status === 401) {
@@ -442,14 +412,12 @@ const MessagingPage = memo(function MessagingPage() {
       }
 
       const result = await response.json();
-      
+
       if (result.status) {
         showToast('Campaign deleted successfully', 'success');
-        // Remove from local state
         setCampaigns(prev => prev.filter(campaign => campaign._id !== campaignId));
         setTotalCampaigns(prev => prev - 1);
-        
-        // Update stats
+
         setCampaignStats(prevStats => ({
           total: prevStats.total - 1,
           completed: campaigns.find(c => c._id === campaignId)?.status === 'completed' ? prevStats.completed - 1 : prevStats.completed,
@@ -467,49 +435,35 @@ const MessagingPage = memo(function MessagingPage() {
     }
   }, [getToken, handleUnauthorized, showToast, campaigns]);
 
-  // Enhanced dialog close handler for campaign details
   const handleCloseCampaignDetails = useCallback(() => {
     setShowCampaignDetails(false);
     setSelectedCampaign(null);
-    
-    // Automatically refresh campaigns data when dialog closes
-    console.log('Campaign details closed, refreshing campaigns...');
     fetchData(false);
   }, [fetchData]);
 
-  // Pagination
   const totalPages = Math.ceil(totalCampaigns / campaignsPerPage);
 
   const handleNextPage = useCallback(() => {
-    if (currentPage < totalPages) {
-      setCurrentPage(currentPage + 1);
-    }
+    if (currentPage < totalPages) setCurrentPage(currentPage + 1);
   }, [currentPage, totalPages]);
 
   const handlePrevPage = useCallback(() => {
-    if (currentPage > 1) {
-      setCurrentPage(currentPage - 1);
-    }
+    if (currentPage > 1) setCurrentPage(currentPage - 1);
   }, [currentPage]);
 
-  // Pagination configuration for Ant Design
   const paginationConfig = {
     current: currentPage,
     pageSize: campaignsPerPage,
     total: totalCampaigns,
     onChange: (page: number, pageSize?: number) => {
       setCurrentPage(page);
-      if (pageSize && pageSize !== campaignsPerPage) {
-        setCampaignsPerPage(pageSize);
-      }
+      if (pageSize && pageSize !== campaignsPerPage) setCampaignsPerPage(pageSize);
     },
     showSizeChanger: true,
     showQuickJumper: true,
-    showTotal: (total: number, range: [number, number]) => 
-      `Showing ${range[0]}-${range[1]} of ${total} campaigns`,
+    showTotal: (total: number, range: [number, number]) => `Showing ${range[0]}-${range[1]} of ${total} campaigns`,
   };
 
-  // Don't render until mounted to prevent hydration issues
   if (!mounted) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
@@ -525,9 +479,7 @@ const MessagingPage = memo(function MessagingPage() {
       <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 sm:mb-8">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-white">
-              Messaging Campaigns
-            </h1>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white">Messaging Campaigns</h1>
             <p className="text-zinc-400 mt-2">Manage your WhatsApp messaging campaigns</p>
           </div>
           <div className="flex gap-3">
@@ -549,10 +501,8 @@ const MessagingPage = memo(function MessagingPage() {
           </div>
         </div>
 
-        {/* Statistics Cards */}
         <CampaignStats stats={campaignStats} />
 
-        {/* Filters and Search */}
         <CampaignFilters
           searchValue={searchValue}
           setSearchValue={setSearchValue}
@@ -561,7 +511,6 @@ const MessagingPage = memo(function MessagingPage() {
           onRefresh={handleRefresh}
         />
 
-        {/* Campaigns Table */}
         <Card className="bg-zinc-900/80 border-zinc-800/80">
           <CardHeader>
             <CardTitle className="text-zinc-200">Campaigns</CardTitle>
@@ -589,13 +538,11 @@ const MessagingPage = memo(function MessagingPage() {
               </div>
             ) : (
               <CampaignTable
-                campaigns={campaigns}
+                campaigns={campaigns.filter(c => c._id)} // Final safeguard to filter out invalid entries
                 isDeleting={isDeleting}
                 loading={isLoading}
                 pagination={paginationConfig}
-                onViewDetails={(campaign) => {
-                  router.push(`/dashboard/campaign/final/${campaign._id}`);
-                }}
+                onViewDetails={(campaign) => router.push(`/dashboard/campaign/final/${campaign._id}`)}
                 onDelete={handleDeleteCampaign}
                 onCampaignUpdate={handleCampaignUpdate}
               />

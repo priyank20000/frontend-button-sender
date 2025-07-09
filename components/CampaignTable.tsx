@@ -52,44 +52,29 @@ const CAMPAIGN_STATUS = {
 };
 
 // Campaign Control Component
-const CampaignControls = memo(({ 
-  campaign, 
-  onCampaignUpdate 
-}: { 
-  campaign: Campaign; 
-  onCampaignUpdate?: (updatedCampaign: Campaign) => void;
-}) => {
+const CampaignControls = memo(({ campaign, onCampaignUpdate }: { campaign: Campaign; onCampaignUpdate?: (updatedCampaign: Campaign) => void }) => {
   const [isControlling, setIsControlling] = useState(false);
 
   const handleCampaignControl = useCallback(async (action: 'stop' | 'pause' | 'resume') => {
     if (isControlling) return;
 
     setIsControlling(true);
-    
-    // Optimistic UI update
+
     let newStatus: Campaign['status'];
-    if (action === 'stop') {
-      newStatus = 'stopped';
-    } else if (action === 'pause') {
-      newStatus = 'paused';
-    } else {
-      newStatus = 'processing';
-    }
-    
+    if (action === 'stop') newStatus = 'stopped';
+    else if (action === 'pause') newStatus = 'paused';
+    else newStatus = 'processing';
+
     const updatedCampaign = { ...campaign, status: newStatus };
     onCampaignUpdate?.(updatedCampaign);
 
     try {
       const authToken = Cookies.get('token') || localStorage.getItem('token');
       let endpoint = '';
-      if (action === 'pause') {
-        endpoint = 'https://whatsapp.recuperafly.com/api/campaign/pause';
-      } else if (action === 'stop') {
-        endpoint = 'https://whatsapp.recuperafly.com/api/campaign/stop';
-      } else if (action === 'resume') {
-        endpoint = 'https://whatsapp.recuperafly.com/api/campaign/resume';
-      }
-      
+      if (action === 'pause') endpoint = 'https://whatsapp.recuperafly.com/api/campaign/pause';
+      else if (action === 'stop') endpoint = 'https://whatsapp.recuperafly.com/api/campaign/stop';
+      else if (action === 'resume') endpoint = 'https://whatsapp.recuperafly.com/api/campaign/resume';
+
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
@@ -101,13 +86,11 @@ const CampaignControls = memo(({
 
       const result = await response.json();
       if (!result.status) {
-        // Revert on failure
-        onCampaignUpdate?.(campaign);
+        onCampaignUpdate?.(campaign); // Revert on failure
         console.error(`Campaign ${action} failed:`, result.message);
       }
     } catch (error) {
-      // Revert on error
-      onCampaignUpdate?.(campaign);
+      onCampaignUpdate?.(campaign); // Revert on error
       console.error(`Error ${action}ing campaign:`, error);
     } finally {
       setIsControlling(false);
@@ -116,7 +99,7 @@ const CampaignControls = memo(({
 
   const getControlActions = () => {
     const actions = [];
-    
+
     if (campaign.status === 'processing') {
       actions.push(
         <Tooltip title="Pause Campaign" key="pause">
@@ -151,7 +134,7 @@ const CampaignControls = memo(({
         </Tooltip>
       );
     }
-    
+
     if (campaign.status === 'paused') {
       actions.push(
         <Tooltip title="Resume Campaign" key="resume">
@@ -186,7 +169,7 @@ const CampaignControls = memo(({
         </Tooltip>
       );
     }
-    
+
     return actions;
   };
 
@@ -204,7 +187,6 @@ const CampaignTable = memo(function CampaignTable({
   loading = false,
   pagination
 }: CampaignTableProps) {
-  
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -216,17 +198,10 @@ const CampaignTable = memo(function CampaignTable({
   };
 
   const getStatusTag = (status: string) => {
-    const statusInfo = CAMPAIGN_STATUS[status as keyof typeof CAMPAIGN_STATUS];
-    if (!statusInfo) {
-      return <Tag color="default">{status}</Tag>;
-    }
-    
+    const statusInfo = CAMPAIGN_STATUS[status as keyof typeof CAMPAIGN_STATUS] || { label: status, color: 'default', icon: Clock };
     const Icon = statusInfo.icon;
     return (
-      <Tag 
-        color={statusInfo.color} 
-        icon={<Icon className="h-3 w-3" />}
-      >
+      <Tag color={statusInfo.color} icon={<Icon className="h-3 w-3" />}>
         {statusInfo.label}
       </Tag>
     );
@@ -267,9 +242,7 @@ const CampaignTable = memo(function CampaignTable({
       key: 'instanceCount',
       width: 100,
       align: 'center',
-      render: (instances) => (
-        <span className="text-zinc-200">{instances}</span>
-      ),
+      render: (instances) => <span className="text-zinc-200">{instances}</span>,
     },
     {
       title: 'Status',
@@ -295,10 +268,7 @@ const CampaignTable = memo(function CampaignTable({
       align: 'center',
       render: (_, record) => (
         <Space size="small">
-          <CampaignControls 
-            campaign={record} 
-            onCampaignUpdate={onCampaignUpdate} 
-          />
+          <CampaignControls campaign={record} onCampaignUpdate={onCampaignUpdate} />
           <Tooltip title="View Details">
             <Button
               type="text"
@@ -345,82 +315,81 @@ const CampaignTable = memo(function CampaignTable({
           showSizeChanger: true,
           showQuickJumper: true,
           pageSizeOptions: ['5', '10', '20', '50'],
-          showTotal: (total, range) => 
-            `Showing ${range[0]}-${range[1]} of ${total} campaigns`,
+          showTotal: (total, range) => `Showing ${range[0]}-${range[1]} of ${total} campaigns`,
         }}
         scroll={{ x: 1000 }}
         size="middle"
         className="campaign-table"
         rowClassName="campaign-row"
       />
-      
+
       <style jsx global>{`
         .campaign-table .ant-table {
           background: transparent;
         }
-        
+
         .campaign-table .ant-table-thead > tr > th {
           background: #18181b !important;
           color: #a1a1aa !important;
           border-bottom: 1px solid #3f3f46 !important;
           font-weight: 600;
         }
-        
+
         .campaign-table .ant-table-tbody > tr > td {
           background: #27272a !important;
           border-bottom: 1px solid #3f3f46 !important;
         }
-        
+
         .campaign-table .ant-table-tbody > tr:hover > td {
           background: #3f3f46 !important;
         }
-        
+
         .campaign-table .ant-table-container {
           border: 1px solid #3f3f46 !important;
           border-radius: 8px;
         }
-        
+
         .ant-pagination-dark {
           background: #18181b;
           padding: 16px;
           border-top: 1px solid #3f3f46;
         }
-        
+
         .ant-pagination-dark .ant-pagination-item {
           background: #27272a !important;
           border-color: #3f3f46 !important;
         }
-        
+
         .ant-pagination-dark .ant-pagination-item a {
           color: #e4e4e7 !important;
         }
-        
+
         .ant-pagination-dark .ant-pagination-item-active {
           background: #3b82f6 !important;
           border-color: #3b82f6 !important;
         }
-        
+
         .ant-pagination-dark .ant-pagination-item-active a {
           color: white !important;
         }
-        
+
         .ant-pagination-dark .ant-pagination-prev,
         .ant-pagination-dark .ant-pagination-next,
         .ant-pagination-dark .ant-pagination-jump-prev,
         .ant-pagination-dark .ant-pagination-jump-next {
           color: #e4e4e7 !important;
         }
-        
+
         .ant-pagination-dark .ant-pagination-options {
           color: #e4e4e7 !important;
         }
-        
+
         .ant-pagination-dark .ant-select-selector {
           background: #27272a !important;
           border-color: #3f3f46 !important;
           color: #e4e4e7 !important;
         }
-        
+
         .ant-pagination-dark .ant-pagination-total-text {
           color: #a1a1aa !important;
         }

@@ -44,6 +44,7 @@
     "antd-style": "^3.7.1",
     "bcryptjs": "^2.4.3",
     "bufferutil": "^4.0.8",
+    "caniuse-lite": "^1.0.30001727",
     "chart.js": "^4.4.9",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",

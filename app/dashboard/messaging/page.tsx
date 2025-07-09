@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, MessageSquare, Loader2, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import Cookies from 'js-cookie';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 
 // Component imports
 import CampaignStats from '../../../components/CampaignStats';
@@ -98,16 +98,30 @@ export default function MessagingPage() {
   const [isDeleting, setIsDeleting] = useState<{ [key: string]: boolean }>({});
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   const router = useRouter();
-  const searchParams = useSearchParams();
 
-  const token = typeof window !== 'undefined' ? (Cookies.get('token') || localStorage.getItem('token')) : null;
+  // Memoized token to prevent unnecessary re-renders
+  const token = useMemo(() => {
+    if (!mounted) return null;
+    return Cookies.get('token') || localStorage.getItem('token');
+  }, [mounted]);
+
   const { on, off, isConnected } = useSocket({ token });
+
+  // Handle mounting
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Check if we need to refresh data (coming from campaign completion)
   useEffect(() => {
-    const shouldRefresh = searchParams.get('refresh');
+    if (!mounted) return;
+    
+    const urlParams = new URLSearchParams(window.location.search);
+    const shouldRefresh = urlParams.get('refresh');
+    
     if (shouldRefresh === 'true') {
       // Remove the refresh parameter from URL
       const newUrl = window.location.pathname;
@@ -116,10 +130,10 @@ export default function MessagingPage() {
       // Force refresh the data
       fetchData();
     }
-  }, [searchParams]);
+  }, [mounted]);
 
   // Toast functions
-  const showToast = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'success') => {
+  const showToast = useCallback((message: string, type: 'success' | 'error' | 'info' | 'warning' = 'success') => {
     const id = Date.now().toString();
     const newToast: ToastMessage = {
       id,
@@ -133,14 +147,16 @@ export default function MessagingPage() {
     setTimeout(() => {
       removeToast(id);
     }, 5000);
-  };
+  }, []);
 
-  const removeToast = (id: string) => {
+  const removeToast = useCallback((id: string) => {
     setToasts(prev => prev.filter(toast => toast.id !== id));
-  };
+  }, []);
 
   // Utility functions
-  const getToken = async (): Promise<string | null | undefined> => {
+  const getToken = useCallback(async (): Promise<string | null | undefined> => {
+    if (!mounted) return null;
+    
     let token: string | null | undefined = Cookies.get('token');
     if (!token) {
       token = localStorage.getItem('token');
@@ -150,16 +166,18 @@ export default function MessagingPage() {
       token = Cookies.get('token') || localStorage.getItem('token');
     }
     return token;
-  };
+  }, [mounted]);
 
-  const handleUnauthorized = () => {
+  const handleUnauthorized = useCallback(() => {
     showToast('Session expired. Please log in again.', 'error');
-    Cookies.remove('token', { path: '/', secure: window.location.protocol === 'https:', sameSite: 'Lax' });
-    localStorage.removeItem('token');
-    Cookies.remove('user', { path: '/', secure: window.location.protocol === 'https:', sameSite: 'Lax' });
-    localStorage.removeItem('user');
+    if (mounted) {
+      Cookies.remove('token', { path: '/', secure: window.location.protocol === 'https:', sameSite: 'Lax' });
+      localStorage.removeItem('token');
+      Cookies.remove('user', { path: '/', secure: window.location.protocol === 'https:', sameSite: 'Lax' });
+      localStorage.removeItem('user');
+    }
     router.push('/');
-  };
+  }, [mounted, router, showToast]);
 
   // Handle campaign updates from real-time events
   const handleCampaignUpdate = useCallback((updatedCampaign: Campaign) => {
@@ -223,6 +241,8 @@ export default function MessagingPage() {
   }, []);
 
   const fetchData = useCallback(async (showLoader = true) => {
+    if (!mounted) return;
+    
     const token = await getToken();
     if (!token) {
       router.push('/');
@@ -234,7 +254,7 @@ export default function MessagingPage() {
     }
   
     try {
-      // Fetch campaigns (unchanged)
+      // Fetch campaigns
       const campaignResponse = await fetch('https://whatsapp.recuperafly.com/api/template/message/all', {
         method: 'POST',
         headers: {
@@ -302,14 +322,18 @@ export default function MessagingPage() {
       }
       setIsRefreshing(false);
     }
-  }, [router, currentPage, campaignsPerPage, searchValue, statusFilter]);
+  }, [mounted, router, currentPage, campaignsPerPage, searchValue, statusFilter, getToken, handleUnauthorized, showToast]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (mounted && token) {
+      fetchData();
+    }
+  }, [mounted, token, fetchData]);
 
   // Auto-refresh data every 30 seconds when there are processing campaigns
   useEffect(() => {
+    if (!mounted) return;
+    
     const hasProcessingCampaigns = campaigns.some(campaign => campaign.status === 'processing');
     
     if (hasProcessingCampaigns) {
@@ -319,10 +343,10 @@ export default function MessagingPage() {
 
       return () => clearInterval(interval);
     }
-  }, [campaigns, fetchData]);
+  }, [mounted, campaigns, fetchData]);
 
   useEffect(() => {
-    if (!isConnected) return;
+    if (!mounted || !isConnected) return;
 
     const handleCampaignProgress = (data: any) => {
       handleCampaignUpdate({
@@ -377,16 +401,16 @@ export default function MessagingPage() {
       off('campaign.paused', handleCampaignPaused);
       off('campaign.resumed', handleCampaignResumed);
     };
-  }, [isConnected, on, off, handleCampaignUpdate]);
+  }, [mounted, isConnected, on, off, handleCampaignUpdate]);
 
   // Manual refresh function
-  const handleRefresh = async () => {
+  const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     await fetchData(false);
-  };
+  }, [fetchData]);
 
   // Campaign operations - Updated delete function to use correct API endpoint
-  const handleDeleteCampaign = async (campaignId: string) => {
+  const handleDeleteCampaign = useCallback(async (campaignId: string) => {
     setIsDeleting(prev => ({ ...prev, [campaignId]: true }));
     
     try {
@@ -436,7 +460,7 @@ export default function MessagingPage() {
     } finally {
       setIsDeleting(prev => ({ ...prev, [campaignId]: false }));
     }
-  };
+  }, [getToken, handleUnauthorized, showToast, campaigns]);
 
   // Enhanced dialog close handler for campaign details
   const handleCloseCampaignDetails = useCallback(() => {
@@ -451,17 +475,26 @@ export default function MessagingPage() {
   // Pagination
   const totalPages = Math.ceil(totalCampaigns / campaignsPerPage);
 
-  const handleNextPage = () => {
+  const handleNextPage = useCallback(() => {
     if (currentPage < totalPages) {
       setCurrentPage(currentPage + 1);
     }
-  };
+  }, [currentPage, totalPages]);
 
-  const handlePrevPage = () => {
+  const handlePrevPage = useCallback(() => {
     if (currentPage > 1) {
       setCurrentPage(currentPage - 1);
     }
-  };
+  }, [currentPage]);
+
+  // Don't render until mounted to prevent hydration issues
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
+        <Loader2 className="h-12 w-12 text-zinc-500 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-zinc-950 p-4 sm:p-6">

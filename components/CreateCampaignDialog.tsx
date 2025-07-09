@@ -8,8 +8,6 @@ import BasicConfiguration from './campaign-steps/BasicConfiguration';
 import ChooseTemplate from './campaign-steps/ChooseTemplate';
 import SelectAudience from './campaign-steps/SelectAudience';
 import ScheduleCampaign from './campaign-steps/ScheduleCampaign';
-import FinalStep from './campaign-steps/FinalStep';
-
 interface CreateCampaignDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -73,7 +71,7 @@ export default function CreateCampaignDialog({
     if (open) {
       // Reset to first step
       setCurrentStep(1);
-      
+
       // Reset all form data
       setCampaignName('');
       setSelectedInstances([]);
@@ -109,7 +107,7 @@ export default function CreateCampaignDialog({
         return;
       }
     }
-    
+
     if (currentStep < 5) {
       setCurrentStep(currentStep + 1);
     }
@@ -177,24 +175,8 @@ export default function CreateCampaignDialog({
             delayRange={delayRange}
             setDelayRange={setDelayRange}
             templates={templates}
-            onSendCampaign={onSendCampaign}
-            isSending={isSending}
-          />
-        );
-      case 5:
-        return (
-          <FinalStep
-            campaignName={campaignName}
-            selectedTemplate={selectedTemplate}
-            selectedInstances={selectedInstances}
-            antdContacts={antdContacts}
-            delayRange={delayRange}
-            templates={templates}
-            instances={instances}
-            onSendCampaign={onSendCampaign}
-            isSending={isSending}
-            onClose={handleClose}
-            onBack={handleBack}
+            onCreateCampaign={onCreateCampaign}
+            isCreating={isCreating}
           />
         );
       default:
@@ -211,16 +193,15 @@ export default function CreateCampaignDialog({
             Connect with your customers through whatsapp.
           </DialogDescription>
         </DialogHeader>
-        
+
         {/* Step Indicator */}
         <div className="flex items-center justify-between mb-8">
           {CAMPAIGN_STEPS.map((step, index) => (
             <div key={step.id} className="flex items-center">
-              <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 ${
-                currentStep >= step.id 
-                  ? 'bg-blue-600 border-blue-600 text-white' 
+              <div className={`flex items-center justify-center w-8 h-8 rounded-full border-2 ${currentStep >= step.id
+                  ? 'bg-blue-600 border-blue-600 text-white'
                   : 'border-zinc-600 text-zinc-400'
-              }`}>
+                }`}>
                 {currentStep > step.id ? (
                   <Check className="h-4 w-4" />
                 ) : (
@@ -228,21 +209,19 @@ export default function CreateCampaignDialog({
                 )}
               </div>
               <div className="ml-3 hidden sm:block">
-                <p className={`text-sm font-medium ${
-                  currentStep >= step.id ? 'text-zinc-200' : 'text-zinc-400'
-                }`}>
+                <p className={`text-sm font-medium ${currentStep >= step.id ? 'text-zinc-200' : 'text-zinc-400'
+                  }`}>
                   {step.title}
                 </p>
               </div>
               {index < CAMPAIGN_STEPS.length - 1 && (
-                <div className={`hidden sm:block w-16 h-0.5 ml-4 ${
-                  currentStep > step.id ? 'bg-blue-600' : 'bg-zinc-600'
-                }`} />
+                <div className={`hidden sm:block w-16 h-0.5 ml-4 ${currentStep > step.id ? 'bg-blue-600' : 'bg-zinc-600'
+                  }`} />
               )}
             </div>
           ))}
         </div>
-        
+
         {/* Step Content */}
         <div className="min-h-[400px]">
           {renderStepContent()}
@@ -260,7 +239,7 @@ export default function CreateCampaignDialog({
               <ArrowLeft className="h-4 w-4 mr-2" />
               Back
             </Button>
-            
+
             <Button
               onClick={handleNext}
               className="bg-zinc-800 hover:bg-zinc-700 text-white"

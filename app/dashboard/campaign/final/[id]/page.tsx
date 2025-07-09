@@ -3,7 +3,8 @@
 import { useRouter } from "next/navigation";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Loader2, Users, CheckCircle, XCircle, AlertTriangle, Wifi, WifiOff, StopCircle, Pause, Play, RefreshCw, ChevronLeft, ChevronRight, Badge, Download } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Loader2, Users, CheckCircle, XCircle, AlertTriangle, Wifi, WifiOff, StopCircle, Pause, Play, RefreshCw, ChevronLeft, ChevronRight, Download } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useCampaignRealtime } from "@/hooks/useCampaignRealtime";

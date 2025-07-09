@@ -1,10 +1,12 @@
 "use client";
 
-import { Table, Button, Tag, Tooltip, Space, Popconfirm } from 'antd';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Eye, Trash2, Loader2, CheckCircle, XCircle, Clock, RefreshCw, StopCircle, Pause, Play } from 'lucide-react';
 import { memo, useState, useCallback } from 'react';
 import Cookies from 'js-cookie';
-import type { ColumnsType } from 'antd/es/table';
 
 interface Campaign {
   _id: string;
@@ -16,7 +18,7 @@ interface Campaign {
   };
   instanceCount: number;
   recipients: any[];
-  status: 'completed' | 'failed' | 'processing' | 'paused' | 'stopped' | 'pending';
+  status: 'completed' | 'failed' | 'processing' | 'paused' | 'stopped';
   totalMessages: number;
   sentMessages: number;
   failedMessages: number;
@@ -30,51 +32,64 @@ interface CampaignTableProps {
   onViewDetails: (campaign: Campaign) => void;
   onDelete: (campaignId: string) => void;
   onCampaignUpdate?: (updatedCampaign: Campaign) => void;
-  loading?: boolean;
-  pagination: {
-    current: number;
-    pageSize: number;
-    total: number;
-    onChange: (page: number, pageSize?: number) => void;
-    showSizeChanger: boolean;
-    showQuickJumper: boolean;
-    showTotal: (total: number, range: [number, number]) => string;
-  };
 }
 
 const CAMPAIGN_STATUS = {
-  completed: { label: 'Completed', color: 'success', icon: CheckCircle },
-  failed: { label: 'Failed', color: 'error', icon: XCircle },
-  pending: { label: 'Pending', color: 'default', icon: Clock },
-  processing: { label: 'Processing', color: 'processing', icon: Clock },
-  paused: { label: 'Paused', color: 'warning', icon: Pause },
-  stopped: { label: 'Stopped', color: 'error', icon: StopCircle },
+  completed: { label: 'Completed', color: 'bg-green-500', icon: CheckCircle },
+  failed: { label: 'Failed', color: 'bg-red-500', icon: XCircle },
+  pending: { label: 'Pending', color: 'bg-gray-500', icon: Clock },
+  processing: { label: 'Processing', color: 'bg-blue-500', icon: Clock },
+  paused: { label: 'Paused', color: 'bg-yellow-500', icon: Pause },
+  stop: { label: 'Stopped', color: 'bg-red-500', icon: StopCircle },
 };
 
-// Campaign Control Component
-const CampaignControls = memo(({ campaign, onCampaignUpdate }: { campaign: Campaign; onCampaignUpdate?: (updatedCampaign: Campaign) => void }) => {
+// Memoized row component to prevent unnecessary re-renders
+const CampaignRow = memo(({ 
+  campaign, 
+  isDeleting, 
+  onViewDetails, 
+  onDelete,
+  onCampaignUpdate
+}: {
+  campaign: Campaign;
+  isDeleting: boolean;
+  onViewDetails: (campaign: Campaign) => void;
+  onDelete: (campaignId: string) => void;
+  onCampaignUpdate?: (updatedCampaign: Campaign) => void;
+}) => {
   const [isControlling, setIsControlling] = useState(false);
 
+  // Campaign control function
   const handleCampaignControl = useCallback(async (action: 'stop' | 'pause' | 'resume') => {
     if (isControlling) return;
 
     setIsControlling(true);
-
+    
+    // Optimistic UI update
     let newStatus: Campaign['status'];
-    if (action === 'stop') newStatus = 'stopped';
-    else if (action === 'pause') newStatus = 'paused';
-    else newStatus = 'processing';
-
+    if (action === 'stop') {
+      newStatus = 'stopped';
+    } else if (action === 'pause') {
+      newStatus = 'paused';
+    } else {
+      newStatus = 'processing';
+    }
+    
     const updatedCampaign = { ...campaign, status: newStatus };
     onCampaignUpdate?.(updatedCampaign);
 
     try {
       const authToken = Cookies.get('token') || localStorage.getItem('token');
       let endpoint = '';
-      if (action === 'pause') endpoint = 'https://whatsapp.recuperafly.com/api/campaign/pause';
-      else if (action === 'stop') endpoint = 'https://whatsapp.recuperafly.com/api/campaign/stop';
-      else if (action === 'resume') endpoint = 'https://whatsapp.recuperafly.com/api/campaign/resume';
-
+      if (action === 'pause') {
+        endpoint = 'https://whatsapp.recuperafly.com/api/campaign/pause';
+      } else if (action === 'stop') {
+        endpoint = 'https://whatsapp.recuperafly.com/api/campaign/stop';
+      } else if (action === 'resume') {
+        endpoint = 'https://whatsapp.recuperafly.com/api/campaign/resume';
+      } else {
+        endpoint = 'https://whatsapp.recuperafly.com/api/template/campaign/control';
+      }
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
@@ -86,107 +101,19 @@ const CampaignControls = memo(({ campaign, onCampaignUpdate }: { campaign: Campa
 
       const result = await response.json();
       if (!result.status) {
-        onCampaignUpdate?.(campaign); // Revert on failure
+        // Revert on failure
+        onCampaignUpdate?.(campaign);
         console.error(`Campaign ${action} failed:`, result.message);
       }
     } catch (error) {
-      onCampaignUpdate?.(campaign); // Revert on error
+      // Revert on error
+      onCampaignUpdate?.(campaign);
       console.error(`Error ${action}ing campaign:`, error);
     } finally {
       setIsControlling(false);
     }
   }, [campaign, isControlling, onCampaignUpdate]);
 
-  const getControlActions = () => {
-    const actions = [];
-
-    if (campaign.status === 'processing') {
-      actions.push(
-        <Tooltip title="Pause Campaign" key="pause">
-          <Button
-            type="text"
-            size="small"
-            icon={<Pause className="h-4 w-4" />}
-            loading={isControlling}
-            onClick={() => handleCampaignControl('pause')}
-            className="text-yellow-500 hover:text-yellow-600"
-          />
-        </Tooltip>
-      );
-      actions.push(
-        <Tooltip title="Stop Campaign" key="stop">
-          <Popconfirm
-            title="Stop Campaign"
-            description="Are you sure you want to stop this campaign? This action cannot be undone."
-            onConfirm={() => handleCampaignControl('stop')}
-            okText="Yes, Stop"
-            cancelText="Cancel"
-            okButtonProps={{ danger: true }}
-          >
-            <Button
-              type="text"
-              size="small"
-              icon={<StopCircle className="h-4 w-4" />}
-              loading={isControlling}
-              className="text-red-500 hover:text-red-600"
-            />
-          </Popconfirm>
-        </Tooltip>
-      );
-    }
-
-    if (campaign.status === 'paused') {
-      actions.push(
-        <Tooltip title="Resume Campaign" key="resume">
-          <Button
-            type="text"
-            size="small"
-            icon={<Play className="h-4 w-4" />}
-            loading={isControlling}
-            onClick={() => handleCampaignControl('resume')}
-            className="text-green-500 hover:text-green-600"
-          />
-        </Tooltip>
-      );
-      actions.push(
-        <Tooltip title="Stop Campaign" key="stop">
-          <Popconfirm
-            title="Stop Campaign"
-            description="Are you sure you want to stop this campaign? This action cannot be undone."
-            onConfirm={() => handleCampaignControl('stop')}
-            okText="Yes, Stop"
-            cancelText="Cancel"
-            okButtonProps={{ danger: true }}
-          >
-            <Button
-              type="text"
-              size="small"
-              icon={<StopCircle className="h-4 w-4" />}
-              loading={isControlling}
-              className="text-red-500 hover:text-red-600"
-            />
-          </Popconfirm>
-        </Tooltip>
-      );
-    }
-
-    return actions;
-  };
-
-  return <>{getControlActions()}</>;
-});
-
-CampaignControls.displayName = 'CampaignControls';
-
-const CampaignTable = memo(function CampaignTable({
-  campaigns,
-  isDeleting,
-  onViewDetails,
-  onDelete,
-  onCampaignUpdate,
-  loading = false,
-  pagination
-}: CampaignTableProps) {
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -197,203 +124,133 @@ const CampaignTable = memo(function CampaignTable({
     });
   };
 
-  const getStatusTag = (status: string) => {
-    const statusInfo = CAMPAIGN_STATUS[status as keyof typeof CAMPAIGN_STATUS] || { label: status, color: 'default', icon: Clock };
+  const getStatusBadge = (status: string) => {
+    // Always show a badge for any known status
+    const statusInfo = CAMPAIGN_STATUS[status as keyof typeof CAMPAIGN_STATUS];
+    if (!statusInfo) return (
+      <Badge className="bg-zinc-700 text-white flex items-center gap-1">
+        {status}
+      </Badge>
+    );
     const Icon = statusInfo.icon;
     return (
-      <Tag color={statusInfo.color} icon={<Icon className="h-3 w-3" />}>
-        {statusInfo.label}
-      </Tag>
+      <div className="flex items-center gap-2">
+        <Badge className={`${statusInfo.color} text-white flex items-center gap-1`}>
+          <Icon className="h-3 w-3" />
+          {statusInfo.label}
+        </Badge>
+      </div>
     );
   };
 
-  const columns: ColumnsType<any> = [
-    {
-      title: 'Campaign',
-      dataIndex: 'campaign',
-      key: 'campaign',
-      width: 250,
-      render: (_, record) => (
-        <div>
-          <div className="font-medium text-zinc-200 truncate max-w-[200px]" title={record.name}>
-            {record.name}
-          </div>
-          <div className="text-xs text-zinc-400">ID: {record._id ? record._id.slice(-8) : 'N/A'}</div>
-        </div>
-      ),
-    },
-    {
-      title: 'Template',
-      dataIndex: 'template',
-      key: 'template',
-      width: 200,
-      render: (_, record) => (
-        <div>
-          <div className="text-zinc-200 truncate max-w-[150px]" title={record.template?.name || 'No Template'}>
-            {record.template?.name || 'No Template'}
-          </div>
-          <div className="text-xs text-zinc-400">{record.template?.messageType || 'Text'}</div>
-        </div>
-      ),
-    },
-    {
-      title: 'Instances',
-      dataIndex: 'instanceCount',
-      key: 'instanceCount',
-      width: 100,
-      align: 'center',
-      render: (instances) => <span className="text-zinc-200">{instances}</span>,
-    },
-    {
-      title: 'Status',
-      dataIndex: 'status',
-      key: 'status',
-      width: 120,
-      align: 'center',
-      render: (status) => getStatusTag(status),
-    },
-    {
-      title: 'Created',
-      dataIndex: 'createdAt',
-      key: 'createdAt',
-      width: 150,
-      render: (createdAt) => (
-        <span className="text-zinc-400 text-sm">{formatDate(createdAt)}</span>
-      ),
-    },
-    {
-      title: 'Actions',
-      key: 'actions',
-      width: 150,
-      align: 'center',
-      render: (_, record) => (
-        <Space size="small">
-          <CampaignControls campaign={record} onCampaignUpdate={onCampaignUpdate} />
-          <Tooltip title="View Details">
-            <Button
-              type="text"
-              size="small"
-              icon={<Eye className="h-4 w-4" />}
-              onClick={() => onViewDetails(record)}
-              className="text-blue-500 hover:text-blue-600"
-            />
-          </Tooltip>
-          <Tooltip title="Delete Campaign">
-            <Popconfirm
-              title="Delete Campaign"
-              description="Are you sure you want to delete this campaign? This action cannot be undone."
-              onConfirm={() => onDelete(record._id)}
-              okText="Yes, Delete"
-              cancelText="Cancel"
-              okButtonProps={{ danger: true }}
-            >
-              <Button
-                type="text"
-                size="small"
-                icon={isDeleting[record._id] ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                loading={isDeleting[record._id]}
-                className="text-red-500 hover:text-red-600"
-              />
-            </Popconfirm>
-          </Tooltip>
-        </Space>
-      ),
-    },
-  ];
 
   return (
-    <div className="bg-zinc-900/80 border border-zinc-800/80 rounded-lg overflow-hidden">
-      <Table
-        columns={columns}
-        dataSource={campaigns}
-        loading={loading}
-        rowKey="_id"
-        pagination={{
-          ...pagination,
-          position: ['bottomCenter'],
-          className: 'ant-pagination-dark',
-          showSizeChanger: true,
-          showQuickJumper: true,
-          pageSizeOptions: ['5', '10', '20', '50'],
-          showTotal: (total, range) => `Showing ${range[0]}-${range[1]} of ${total} campaigns`,
-        }}
-        scroll={{ x: 1000 }}
-        size="middle"
-        className="campaign-table"
-        rowClassName="campaign-row"
-      />
+    <TableRow className="border-zinc-800 hover:bg-zinc-800/30 transition-colors">
+      <TableCell>
+        <div>
+          <p className="text-zinc-200 font-medium truncate max-w-[200px]" title={campaign.name}>
+            {campaign.name}
+          </p>
+          <p className="text-zinc-400 text-xs">ID: {campaign._id ? campaign._id.slice(-8) : 'N/A'}</p>
+        </div>
+      </TableCell>
+      <TableCell>
+        <div>
+          <p className="text-zinc-200 truncate max-w-[150px]" title={campaign.template?.name || 'No Template'}>
+            {campaign.template?.name || 'No Template'}
+          </p>
+          <p className="text-zinc-400 text-xs">{campaign.template?.messageType || 'Text'}</p>
+        </div>
+      </TableCell>
+      <TableCell className="text-zinc-200">{campaign.instanceCount}</TableCell>
+      <TableCell>
+        <div className="flex flex-col gap-1">
+          {getStatusBadge(campaign.status)}
+        </div>
+      </TableCell>
+      <TableCell className="text-zinc-400 text-sm">{formatDate(campaign.createdAt)}</TableCell>
+      <TableCell>
+        <div className="flex items-center gap-1">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onViewDetails(campaign)}
+                  className="text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700 h-8 w-8 p-0"
+                >
+                  <Eye className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>View Details</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onDelete(campaign._id)}
+                  disabled={isDeleting}
+                  className="text-zinc-400 hover:text-red-400 hover:bg-red-500/10 h-8 w-8 p-0"
+                >
+                  {isDeleting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Delete Campaign</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+});
 
-      <style jsx global>{`
-        .campaign-table .ant-table {
-          background: transparent;
-        }
+CampaignRow.displayName = 'CampaignRow';
 
-        .campaign-table .ant-table-thead > tr > th {
-          background: #18181b !important;
-          color: #a1a1aa !important;
-          border-bottom: 1px solid #3f3f46 !important;
-          font-weight: 600;
-        }
-
-        .campaign-table .ant-table-tbody > tr > td {
-          background: #27272a !important;
-          border-bottom: 1px solid #3f3f46 !important;
-        }
-
-        .campaign-table .ant-table-tbody > tr:hover > td {
-          background: #3f3f46 !important;
-        }
-
-        .campaign-table .ant-table-container {
-          border: 1px solid #3f3f46 !important;
-          border-radius: 8px;
-        }
-
-        .ant-pagination-dark {
-          background: #18181b;
-          padding: 16px;
-          border-top: 1px solid #3f3f46;
-        }
-
-        .ant-pagination-dark .ant-pagination-item {
-          background: #27272a !important;
-          border-color: #3f3f46 !important;
-        }
-
-        .ant-pagination-dark .ant-pagination-item a {
-          color: #e4e4e7 !important;
-        }
-
-        .ant-pagination-dark .ant-pagination-item-active {
-          background: #3b82f6 !important;
-          border-color: #3b82f6 !important;
-        }
-
-        .ant-pagination-dark .ant-pagination-item-active a {
-          color: white !important;
-        }
-
-        .ant-pagination-dark .ant-pagination-prev,
-        .ant-pagination-dark .ant-pagination-next,
-        .ant-pagination-dark .ant-pagination-jump-prev,
-        .ant-pagination-dark .ant-pagination-jump-next {
-          color: #e4e4e7 !important;
-        }
-
-        .ant-pagination-dark .ant-pagination-options {
-          color: #e4e4e7 !important;
-        }
-
-        .ant-pagination-dark .ant-select-selector {
-          background: #27272a !important;
-          border-color: #3f3f46 !important;
-          color: #e4e4e7 !important;
-        }
-
-        .ant-pagination-dark .ant-pagination-total-text {
-          color: #a1a1aa !important;
-        }
-      `}</style>
+const CampaignTable = memo(function CampaignTable({
+  campaigns,
+  isDeleting,
+  onViewDetails,
+  onDelete,
+  onCampaignUpdate
+}: CampaignTableProps) {
+  return (
+    <div className="overflow-x-auto">
+      <Table>
+        <TableHeader>
+          <TableRow className="border-zinc-800">
+            <TableHead className="text-zinc-400 font-semibold">Campaign</TableHead>
+            <TableHead className="text-zinc-400 font-semibold">Template</TableHead>
+            <TableHead className="text-zinc-400 font-semibold">Instances</TableHead>
+            <TableHead className="text-zinc-400 font-semibold">Status</TableHead>
+            <TableHead className="text-zinc-400 font-semibold">Created</TableHead>
+            <TableHead className="text-zinc-400 font-semibold">Actions</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {campaigns.map((campaign) => (
+            <CampaignRow
+              key={campaign._id}
+              campaign={campaign}
+              isDeleting={isDeleting[campaign._id] || false}
+              onViewDetails={onViewDetails}
+              onDelete={onDelete}
+              onCampaignUpdate={onCampaignUpdate}
+            />
+          ))}
+        </TableBody>
+      </Table>
     </div>
   );
 });

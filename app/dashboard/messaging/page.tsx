@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Plus, MessageSquare, Loader2, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import Link from 'next/link';
 import Cookies from 'js-cookie';
@@ -12,7 +11,6 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import CampaignStats from '../../../components/CampaignStats';
 import CampaignFilters from '../../../components/CampaignFilters';
 import CampaignTable from '../../../components/CampaignTable';
-import CampaignDetailsDialog from '../../../components/CampaignDetailsDialog';
 import ToastContainer from '../../../components/ToastContainer';
 import { useSocket } from '../../../hooks/useSocket';
 
@@ -398,12 +396,15 @@ export default function MessagingPage() {
         return;
       }
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/campaigns/${campaignId}`, {
-        method: 'DELETE',
+      const response = await fetch('https://whatsapp.recuperafly.com/api/campaign/delete', {
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify({ 
+          campaignId: campaignId 
+        })
       });
 
       if (response.status === 401) {
@@ -411,7 +412,9 @@ export default function MessagingPage() {
         return;
       }
 
-      if (response.ok) {
+      const result = await response.json();
+      
+      if (result.status) {
         showToast('Campaign deleted successfully', 'success');
         // Remove from local state
         setCampaigns(prev => prev.filter(campaign => campaign._id !== campaignId));
@@ -425,8 +428,7 @@ export default function MessagingPage() {
           processing: campaigns.find(c => c._id === campaignId)?.status === 'processing' ? prevStats.processing - 1 : prevStats.processing,
         }));
       } else {
-        const errorData = await response.json();
-        showToast(errorData.message || 'Failed to delete campaign', 'error');
+        showToast(result.message || 'Failed to delete campaign', 'error');
       }
     } catch (error) {
       console.error('Error deleting campaign:', error);
@@ -600,13 +602,6 @@ export default function MessagingPage() {
             </CardFooter>
           )}
         </Card>
-
-        {/* Dialogs */}
-        <CampaignDetailsDialog
-          open={showCampaignDetails}
-          onOpenChange={handleCloseCampaignDetails}
-          campaign={selectedCampaign}
-        />
       </div>
     </div>
   );

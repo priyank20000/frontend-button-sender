@@ -68,7 +68,7 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
     setIsDownloadingExcel(true);
     try {
       const response = await fetch('https://whatsapp.recuperafly.com/api/template/xcel', {
-        method: 'GET',
+        method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -101,10 +101,36 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
     }
   };
 
-  // Modified handleStopCampaign to prevent status changes
-  const handleStopCampaignModified = () => {
-    // Call the original stop function but don't update recipient statuses
-    handleStopCampaign();
+  // Modified handleStopCampaign to prevent page reload and maintain UI state
+  const handleStopCampaignModified = async (e?: React.MouseEvent) => {
+    // Prevent any default behavior that might cause page reload
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
+    // Call the original stop function
+    await handleStopCampaign();
+  };
+
+  // Modified handlePauseCampaign to prevent page reload
+  const handlePauseCampaignModified = async (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
+    await handlePauseCampaign();
+  };
+
+  // Modified handleResumeCampaign to prevent page reload
+  const handleResumeCampaignModified = async (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
+    await handleResumeCampaign();
   };
 
   if (isLoading) {
@@ -141,7 +167,15 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
 
   const getRecipientStatus = (recipient: any) => {
     const originalIndex = campaign.recipients?.indexOf(recipient) || 0;
-    return recipientStatuses[originalIndex] || 'pending';
+    const status = recipientStatuses[originalIndex] || 'pending';
+    
+    // Don't change status to 'stopped' for pending recipients when campaign is stopped
+    // Keep them as 'pending' as requested
+    if (status === 'stopped') {
+      return 'pending';
+    }
+    
+    return status;
   };
 
   const getStatusColor = (status: string) => {
@@ -180,6 +214,12 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
 
   const canResume = isPaused && connectionStatus.connectedCount > 0;
 
+  // Ensure total messages count is always available
+  const totalMessages = campaign.totalMessages || campaign.recipients?.length || 0;
+
+  // Show download button when campaign is paused, stopped, or completed
+  const showDownloadButton = isPaused || isStopped || (!isProcessing && (sentCount > 0 || failedCount > 0 || notExistCount > 0));
+
   return (
     <div className="min-h-screen bg-zinc-950 p-6">
       <div className="max-w-6xl mx-auto space-y-8">
@@ -193,11 +233,12 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
             {isProcessing && (
               <>
                 <Button
-                  onClick={handlePauseCampaign}
+                  onClick={handlePauseCampaignModified}
                   disabled={controlStates.isPausing}
                   variant="outline"
                   size="sm"
                   className="bg-yellow-600/20 border-yellow-500 text-yellow-400 hover:bg-yellow-600/30 transition-all duration-75"
+                  type="button"
                 >
                   <Pause className="h-4 w-4 mr-2" />
                   {controlStates.isPausing ? 'Pausing...' : 'Pause'}
@@ -208,6 +249,7 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
                   variant="outline"
                   size="sm"
                   className="bg-red-600/20 border-red-500 text-red-400 hover:bg-red-600/30 transition-all duration-75"
+                  type="button"
                 >
                   <StopCircle className="h-4 w-4 mr-2" />
                   {controlStates.isStopping ? 'Stopping...' : 'Stop'}
@@ -217,7 +259,7 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
             {isPaused && (
               <>
                 <Button
-                  onClick={handleResumeCampaign}
+                  onClick={handleResumeCampaignModified}
                   disabled={controlStates.isResuming || !canResume}
                   variant="outline"
                   size="sm"
@@ -226,6 +268,7 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
                       ? 'bg-green-600/20 border-green-500 text-green-400 hover:bg-green-600/30' 
                       : 'bg-gray-600/20 border-gray-500 text-gray-400 cursor-not-allowed opacity-50'
                   }`}
+                  type="button"
                 >
                   <Play className="h-4 w-4 mr-2" />
                   {controlStates.isResuming ? 'Resuming...' : 
@@ -237,6 +280,7 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
                   variant="outline"
                   size="sm"
                   className="bg-red-600/20 border-red-500 text-red-400 hover:bg-red-600/30 transition-all duration-75"
+                  type="button"
                 >
                   <StopCircle className="h-4 w-4 mr-2" />
                   {controlStates.isStopping ? 'Stopping...' : 'Stop'}
@@ -249,14 +293,15 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
                 Campaign Stopped
               </div>
             )}
-            {/* Download Excel Button - Show when paused or stopped */}
-            {(isPaused || isStopped) && (
+            {/* Download Excel Button - Always show when campaign has progress or is completed */}
+            {showDownloadButton && (
               <Button
                 onClick={handleDownloadExcel}
                 disabled={isDownloadingExcel}
                 variant="outline"
                 size="sm"
                 className="bg-green-600/20 border-green-500 text-green-400 hover:bg-green-600/30 transition-all duration-75"
+                type="button"
               >
                 {isDownloadingExcel ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -272,6 +317,7 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
               variant="outline"
               size="sm"
               className="bg-zinc-800 border-zinc-700 text-zinc-200 hover:bg-zinc-700"
+              type="button"
             >
               <RefreshCw className={`h-4 w-4 mr-2 ${(isRefreshing || isLoading) ? 'animate-spin' : ''}`} />
               Refresh
@@ -283,11 +329,18 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
                 variant="outline"
                 size="sm"
                 className="bg-blue-600/20 border-blue-500 text-blue-400 hover:bg-blue-600/30"
+                type="button"
               >
                 {isStarting ? 'Starting...' : 'Start'}
               </Button>
             )}
-            <Button variant="outline" onClick={() => router.push('/dashboard/messaging')}>Back to Messaging</Button>
+            <Button 
+              variant="outline" 
+              onClick={() => router.push('/dashboard/messaging')}
+              type="button"
+            >
+              Back to Messaging
+            </Button>
           </div>
         </div>
 
@@ -377,10 +430,11 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
           </div>
         )}
 
+        {/* Stats Cards - Always show total messages */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <div className="bg-zinc-800/50 border border-zinc-700 rounded-lg p-4">
             <div className="text-center">
-              <div className="text-2xl font-bold text-blue-400">{campaign.totalMessages}</div>
+              <div className="text-2xl font-bold text-blue-400">{totalMessages}</div>
               <div className="text-sm text-blue-300">Total</div>
             </div>
           </div>
@@ -416,6 +470,7 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
                 variant={statusFilter === 'all' ? 'default' : 'outline'}
                 size="sm"
                 className={statusFilter === 'all' ? 'bg-blue-600 text-white' : 'bg-zinc-800 border-zinc-700 text-white hover:bg-gray-700'}
+                type="button"
               >
                 <Users className="h-4 w-4 mr-2" />
                 All ({campaign.recipients?.length || 0})
@@ -428,6 +483,7 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
                 variant={statusFilter === 'sent' ? 'default' : 'outline'}
                 size="sm"
                 className={statusFilter === 'sent' ? 'bg-green-600 text-white' : 'bg-zinc-800 border-zinc-700 text-white hover:bg-gray-700'}
+                type="button"
               >
                 <CheckCircle className="h-4 w-4 mr-2" />
                 Sent ({sentCount})
@@ -440,6 +496,7 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
                 variant={statusFilter === 'failed' ? 'default' : 'outline'}
                 size="sm"
                 className={statusFilter === 'failed' ? 'bg-red-600 text-white' : 'bg-zinc-800 border-zinc-700 text-white hover:bg-gray-700'}
+                type="button"
               >
                 <XCircle className="h-4 w-4 mr-2" />
                 Failed ({failedCount})
@@ -452,6 +509,7 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
                 variant={statusFilter === 'not_exist' ? 'default' : 'outline'}
                 size="sm"
                 className={statusFilter === 'not_exist' ? 'bg-orange-600 text-white' : 'bg-zinc-800 border-zinc-700 text-white hover:bg-gray-700'}
+                type="button"
               >
                 <AlertTriangle className="h-4 w-4 mr-2" />
                 Error ({notExistCount})
@@ -514,6 +572,7 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
                       : 'text-zinc-400 hover:text-white hover:bg-gray-700'
                   }`}
                   aria-label="Previous page"
+                  type="button"
                 >
                   <ChevronLeft className="h-5 w-5" />
                 </button>
@@ -539,6 +598,7 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
                             : 'bg-transparent hover:bg-gray-700 text-zinc-400 hover:text-white'
                         }`}
                         aria-label={`Page ${page}`}
+                        type="button"
                       >
                         {page}
                       </button>
@@ -554,6 +614,7 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
                       : 'text-zinc-400 hover:text-white hover:bg-gray-700'
                   }`}
                   aria-label="Next page"
+                  type="button"
                 >
                   <ChevronRight className="h-5 w-5" />
                 </button>

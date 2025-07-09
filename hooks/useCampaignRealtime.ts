@@ -480,8 +480,6 @@ export function useCampaignRealtime(campaignId: string) {
           endpoint = 'https://whatsapp.recuperafly.com/api/campaign/stop';
         } else if (action === 'resume') {
           endpoint = 'https://whatsapp.recuperafly.com/api/campaign/resume';
-        } else {
-          endpoint = 'https://whatsapp.recuperafly.com/api/template/campaign/control';
         }
         const payload = { campaignId: campaign._id };
         const response = await fetch(endpoint, {

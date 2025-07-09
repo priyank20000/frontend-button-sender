@@ -169,8 +169,6 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
     const originalIndex = campaign.recipients?.indexOf(recipient) || 0;
     const status = recipientStatuses[originalIndex] || 'pending';
     
-    // Don't change status to 'stopped' for pending recipients when campaign is stopped
-    // Keep them as 'pending' as requested
     if (status === 'stopped') {
       return 'pending';
     }
@@ -226,8 +224,6 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-white">Campaign Details</h1>
-            <p className="text-zinc-400 mt-1">Name: <span className="text-white font-semibold">{campaign.name}</span></p>
-            <p className="text-zinc-400">Status: <span className="text-white font-semibold capitalize">{campaign.status}</span></p>
           </div>
           <div className="flex gap-2">
             {isProcessing && (

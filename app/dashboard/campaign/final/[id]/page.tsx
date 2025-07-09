@@ -328,10 +328,21 @@ export default function CampaignFinalPage({ params }: { params: { id: string } }
                 disabled={isStarting}
                 variant="outline"
                 size="sm"
-                className="bg-blue-600/20 border-blue-500 text-blue-400 hover:bg-blue-600/30"
+                className={`transition-all duration-75 ${
+                  isStarting 
+                    ? 'bg-blue-600/10 border-blue-500/50 text-blue-400/70 cursor-not-allowed' 
+                    : 'bg-blue-600/20 border-blue-500 text-blue-400 hover:bg-blue-600/30'
+                }`}
                 type="button"
               >
-                {isStarting ? 'Starting...' : 'Start'}
+                {isStarting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Starting...
+                  </>
+                ) : (
+                  'Start Campaign'
+                )}
               </Button>
             )}
             <Button 

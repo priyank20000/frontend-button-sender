@@ -754,15 +754,6 @@ const MessagingPage = memo(function MessagingPage() {
                 </div>
               }
             >
-              {!searchValue && statusFilter === 'all' && (
-                <StyledButton
-                  variant="primary"
-                  icon={<PlusOutlined />}
-                  onClick={() => navigate('/campaign')}
-                >
-                  Create Campaign
-                </StyledButton>
-              )}
             </Empty>
           ) : (
             <>

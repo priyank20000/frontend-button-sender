@@ -572,7 +572,7 @@ const MessagingPage = memo(function MessagingPage() {
               </div>
             ) : (
               <CampaignTable
-                campaigns={campaigns}
+                campaigns={campaigns.filter(c => c._id && c.name && c.template && c.template.name && c.createdAt)}
                 isDeleting={isDeleting}
                 onViewDetails={(campaign) => {
                   router.push(`/dashboard/campaign/final/${campaign._id}`);

@@ -1,0 +1,412 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #000000;
+  color: #ffffff;
+}
+
+#root {
+  min-height: 100vh;
+  background-color: #000000;
+}
+
+.ant-layout {
+  min-height: 100vh;
+  background-color: #000000 !important;
+  overflow: hidden;
+}
+
+.ant-layout-content {
+  background-color: #000000 !important;
+  overflow-y: auto;
+  height: 100vh;
+}
+
+.ant-layout-sider {
+  position: fixed !important;
+  left: 0 !important;
+  top: 0 !important;
+  height: 100vh !important;
+  z-index: 100 !important;
+  overflow-y: auto !important;
+}
+
+.ant-layout-sider .ant-layout-sider-children {
+  height: 100vh !important;
+  overflow-y: auto !important;
+}
+
+/* Adjust content to account for fixed sidebar */
+.ant-layout-has-sider .ant-layout-content {
+  margin-left: 200px !important;
+}
+
+.ant-card {
+  background: #0a0a0a !important;
+  border: 1px solid #1a1a1a !important;
+}
+
+.ant-card-body {
+  color: #ffffff !important;
+}
+
+.ant-menu-dark {
+  background: #000000 !important;
+}
+
+.ant-menu-dark .ant-menu-item {
+  color: #888888 !important;
+}
+
+.ant-menu-dark .ant-menu-item-selected {
+  background-color: #1a1a1a !important;
+  color: #ffffff !important;
+}
+
+.ant-menu-dark .ant-menu-item:hover {
+  background-color: #1a1a1a !important;
+  color: #ffffff !important;
+}
+
+/* Template Table Styles */
+.ant-table {
+  background: #0a0a0a !important;
+}
+
+.ant-table-thead > tr > th {
+  background: #1a1a1a !important;
+  border-bottom: 1px solid #333333 !important;
+  color: #ffffff !important;
+  font-weight: 600;
+}
+
+.ant-table-tbody > tr > td {
+  background: #0a0a0a !important;
+  border-bottom: 1px solid #1a1a1a !important;
+  color: #ffffff !important;
+}
+
+.ant-table-tbody > tr:hover > td {
+  background: #1a1a1a !important;
+}
+
+.ant-pagination {
+  color: #ffffff !important;
+}
+
+.ant-pagination .ant-pagination-item {
+  background: #1a1a1a !important;
+  border: 1px solid #333333 !important;
+}
+
+.ant-pagination .ant-pagination-item a {
+  color: #ffffff !important;
+}
+
+.ant-pagination .ant-pagination-item-active {
+  background: #4a9eff !important;
+  border-color: #4a9eff !important;
+}
+
+.ant-pagination .ant-pagination-item-active a {
+  color: #ffffff !important;
+}
+
+/* Select Component Styles */
+.ant-select-dropdown {
+  background: #1a1a1a !important;
+  border: 1px solid #333333 !important;
+}
+
+.ant-select-item {
+  color: #ffffff !important;
+}
+
+.ant-select-item:hover {
+  background: #333333 !important;
+}
+
+.ant-select-item-option-selected {
+  background: #4a9eff !important;
+}
+
+/* Select Input Styles */
+.ant-select-selector {
+  background: #2a2a2a !important;
+  border: 1px solid #555555 !important;
+  color: #ffffff !important;
+}
+
+.ant-select-selection-placeholder {
+  color: #ffffff !important;
+  font-weight: 600 !important;
+}
+
+.ant-select-arrow {
+  color: #ffffff !important;
+}
+
+.ant-select:hover .ant-select-selector {
+  border-color: #4a9eff !important;
+}
+
+.ant-select-focused .ant-select-selector {
+  border-color: #4a9eff !important;
+  box-shadow: 0 0 0 2px rgba(74, 158, 255, 0.2) !important;
+}
+
+/* Custom Notification Styles */
+.ant-notification-notice {
+  border-radius: 8px !important;
+  padding: 0 !important;
+}
+
+.ant-notification-notice-content {
+  background: inherit !important;
+  border-radius: 8px !important;
+  padding: 16px !important;
+}
+
+.ant-notification-notice-message {
+  color: #ffffff !important;
+  font-weight: 600 !important;
+  font-size: 16px !important;
+}
+
+.ant-notification-notice-description {
+  color: #cccccc !important;
+  font-size: 14px !important;
+}
+
+.ant-notification-notice-close {
+  color: #888888 !important;
+}
+
+.ant-notification-notice-close:hover {
+  color: #ffffff !important;
+}
+
+.ant-notification-notice-icon {
+  margin-right: 12px !important;
+  font-size: 20px !important;
+}
+
+/* Modal Close Button Styles */
+.ant-modal-close {
+  color: #ff4d4f !important;
+  background: rgba(255, 77, 79, 0.1) !important;
+  border-radius: 6px !important;
+  width: 32px !important;
+  height: 32px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 8px !important;
+}
+
+.ant-modal-close:hover {
+  background: rgba(255, 77, 79, 0.2) !important;
+  color: #ff6b6b !important;
+}
+
+.ant-modal-close-x {
+  font-size: 18px !important;
+  font-weight: bold !important;
+  line-height: 1 !important;
+}
+
+/* Custom Gray Scrollbar Styles */
+.gray-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.gray-scrollbar::-webkit-scrollbar-track {
+  background: #1a1a1a;
+  border-radius: 4px;
+}
+
+.gray-scrollbar::-webkit-scrollbar-thumb {
+  background: #666666;
+  border-radius: 4px;
+  border: 1px solid #333333;
+}
+
+.gray-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #888888;
+}
+
+.gray-scrollbar::-webkit-scrollbar-corner {
+  background: #1a1a1a;
+}
+
+/* For Firefox */
+.gray-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #666666 #1a1a1a;
+}
+
+/* Ant Design Table Scrollbar Override */
+.ant-table-body::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.ant-table-body::-webkit-scrollbar-track {
+  background: #1a1a1a;
+  border-radius: 4px;
+}
+
+.ant-table-body::-webkit-scrollbar-thumb {
+  background: #666666;
+  border-radius: 4px;
+  border: 1px solid #333333;
+}
+
+.ant-table-body::-webkit-scrollbar-thumb:hover {
+  background: #888888;
+}
+
+.ant-table-body::-webkit-scrollbar-corner {
+  background: #1a1a1a;
+}
+
+/* For Firefox - Ant Table */
+.ant-table-body {
+  scrollbar-width: thin;
+  scrollbar-color: #666666 #1a1a1a;
+}
+
+.login-container {
+  min-height: 100vh;
+  background: #0a0a0a;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-form {
+  background: #1a1a1a;
+  border: 1px solid #333333;
+  border-radius: 8px;
+  padding: 48px 40px;
+  width: 100%;
+  max-width: 400px;
+}
+
+.connect-qr {
+  background: #ffffff;
+  padding: 20px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+}
+
+.instance-card {
+  background: #1f1f1f;
+  border: 1px solid #303030;
+  transition: all 0.3s ease;
+}
+
+.instance-card:hover {
+  border-color: #1890ff;
+  box-shadow: 0 4px 12px rgba(24, 144, 255, 0.15);
+}
+
+.status-connected {
+  color: #52c41a;
+}
+
+.status-disconnected {
+  color: #ff4d4f;
+}
+
+@media (max-width: 768px) {
+  .login-form {
+    margin: 20px;
+    padding: 30px 20px;
+  }
+}
+
+/* Real-time pulse animation for live indicators */
+@keyframes pulse {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.05);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Real-time status update animations */
+.status-update-animation {
+  animation: statusUpdate 0.5s ease-in-out;
+}
+
+@keyframes statusUpdate {
+  0% {
+    background-color: rgba(74, 158, 255, 0.2);
+    transform: scale(1);
+  }
+  50% {
+    background-color: rgba(74, 158, 255, 0.4);
+    transform: scale(1.02);
+  }
+  100% {
+    background-color: transparent;
+    transform: scale(1);
+  }
+}
+
+/* Login page animations */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Enhanced input focus styles */
+.ant-input:focus,
+.ant-input-password:focus {
+  border-color: #4a9eff !important;
+  box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.1) !important;
+}
+
+.ant-input-password .ant-input:focus {
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Custom scrollbar for login page */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #4a9eff;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #69c0ff;
+}

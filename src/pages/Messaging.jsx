@@ -478,6 +478,68 @@ const MessagingPage = memo(function MessagingPage() {
               />
             </Tooltip>
           )}
+
+          {/* Stop Button - Only for processing/paused campaigns with real-time Popconfirm */}
+          <Popconfirm
+            title={
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <StopOutlined style={{ color: '#ff4d4f' }} />
+                <span style={{ color: '#ffffff', fontWeight: '600' }}>Stop Campaign</span>
+              </div>
+            }
+            description={
+              <div style={{ maxWidth: '280px' }}>
+                <div style={{ color: '#888888', marginBottom: '8px' }}>
+                  Are you sure you want to stop "{record.name}"?
+                </div>
+                <Alert
+                  message="This action cannot be undone and the campaign cannot be resumed."
+                  type="warning"
+                  showIcon
+                  icon={<WarningOutlined />}
+                  style={{
+                    background: '#3a2f0f',
+                    border: '1px solid #faad14',
+                    borderRadius: '6px',
+                    fontSize: '12px'
+                  }}
+                />
+              </div>
+            }
+            onConfirm={() => handleStopCampaign(record._id, record.name)}
+            okText="Yes, Stop"
+            cancelText="Cancel"
+            disabled={record.status !== 'processing' && record.status !== 'paused'}
+            okButtonProps={{
+              style: {
+                background: '#ff4d4f',
+                borderColor: '#ff4d4f',
+                color: '#ffffff'
+              }
+            }}
+            cancelButtonProps={{
+              style: {
+                background: '#1a1a1a',
+                borderColor: '#404040',
+                color: '#ffffff'
+              }
+            }}
+            placement="topRight"
+          >
+            <Tooltip title={
+              record.status === 'processing' || record.status === 'paused' 
+                ? 'Stop Campaign' 
+                : 'Campaign already stopped/completed'
+            }>
+              <StyledButton
+                variant="danger"
+                size="small"
+                icon={<StopOutlined />}
+                loading={isControlling[record._id]}
+                disabled={record.status !== 'processing' && record.status !== 'paused'}
+              />
+            </Tooltip>
+          </Popconfirm>
           
           {/* View Button - Always available */}
           <Tooltip title="View Details">
@@ -754,6 +816,15 @@ const MessagingPage = memo(function MessagingPage() {
                 </div>
               }
             >
+              {!searchValue && statusFilter === 'all' && (
+                <StyledButton
+                  variant="primary"
+                  icon={<PlusOutlined />}
+                  onClick={() => navigate('/campaign')}
+                >
+                  Create Campaign
+                </StyledButton>
+              )}
             </Empty>
           ) : (
             <>

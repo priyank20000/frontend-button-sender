@@ -69,6 +69,16 @@ const CampaignFinal = () => {
         isStopping: false
     })
 
+    // Real-time progress states
+    const [liveProgress, setLiveProgress] = useState({
+        processed: 0,
+        progressPercentage: 0,
+        estimatedTimeRemaining: 0,
+        lastRecipient: '',
+        lastRecipientPhone: '',
+        currentInstanceIndex: 0,
+        availableInstances: 0
+    })
 
     // UI states
     const [currentPage, setCurrentPage] = useState(1)
@@ -371,7 +381,7 @@ const CampaignFinal = () => {
                         : 'No instances connected',
                     subMessage: isConnected
                         ? 'Campaign can proceed with connected instances'
-                        : 'Please connect at least one instance to continue'
+                        : 'Please connect at least one instance to continue',
 
                 })
             }
@@ -477,21 +487,18 @@ const CampaignFinal = () => {
     const handleDownloadExcel = async () => {
         setIsDownloadingExcel(true)
         try {
-            const response = await fetch('http://localhost:5000/api/template/xcel', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ campaignId })
+            const response = await api.post('/template/xcel', { campaignId }, {
+                responseType: 'blob'
             })
 
-            if (response.ok) {
-                const blob = await response.blob()
+            if (response.status === 200) {
+                const blob = new Blob([response.data], {
+                    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                })
                 const url = window.URL.createObjectURL(blob)
                 const link = document.createElement('a')
                 link.href = url
-                link.download = `campaign-${campaignId}-report.xlsx`
+                link.download = `campaign-${campaign?.name || campaignId}-pending-recipients.xlsx`
                 document.body.appendChild(link)
                 link.click()
                 document.body.removeChild(link)
@@ -502,7 +509,11 @@ const CampaignFinal = () => {
             }
         } catch (error) {
             console.error('Error downloading Excel:', error)
-            toast.error('Error downloading Excel file')
+            if (error.response?.status === 404) {
+                toast.error('No pending recipients found for this campaign')
+            } else {
+                toast.error('Error downloading Excel file: ' + (error.response?.data?.message || error.message))
+            }
         } finally {
             setIsDownloadingExcel(false)
         }
@@ -667,12 +678,13 @@ const CampaignFinal = () => {
         return (
             <div style={{
                 textAlign: 'center',
-                color: '#ffffff',
                 padding: '40px',
                 background: '#000000',
                 minHeight: '100vh'
             }}>
-                <Text style={{ color: '#ffffff', fontSize: '18px' }}>Campaign not found.</Text>
+                <Text style={{ color: '#ffffff', fontSize: '18px' }}>
+                    Campaign not found.
+                </Text>
             </div>
         )
     }
@@ -810,7 +822,7 @@ const CampaignFinal = () => {
                         <StyledButton
                             variant="secondary"
                             icon={<LeftOutlined />}
-                            onClick={() => navigate('/messaging')}
+                            onClick={() => navigate('/dashboard')}
                             size="middle"
                         >
                             Back to Dashboard
@@ -861,7 +873,11 @@ const CampaignFinal = () => {
                 {/* Statistics Cards with Real-time Updates */}
                 <Row gutter={[16, 16]} style={{ marginBottom: '32px' }}>
                     <Col xs={12} md={6}>
-                        <Card style={{ background: '#1a1a1a', border: '1px solid #333333' }}>
+                        <Card style={{
+                            background: '#1a1a1a',
+                            border: '1px solid #333333',
+                            borderRadius: '8px'
+                        }}>
                             <Statistic
                                 title={<span style={{ color: '#888888' }}>Total</span>}
                                 value={totalMessages}
@@ -870,7 +886,11 @@ const CampaignFinal = () => {
                         </Card>
                     </Col>
                     <Col xs={12} md={6}>
-                        <Card style={{ background: '#1a1a1a', border: '1px solid #333333' }}>
+                        <Card style={{
+                            background: '#1a1a1a',
+                            border: '1px solid #333333',
+                            borderRadius: '8px'
+                        }}>
                             <Statistic
                                 title={<span style={{ color: '#888888' }}>Sent</span>}
                                 value={sentCount}
@@ -880,7 +900,11 @@ const CampaignFinal = () => {
                         </Card>
                     </Col>
                     <Col xs={12} md={6}>
-                        <Card style={{ background: '#1a1a1a', border: '1px solid #333333' }}>
+                        <Card style={{
+                            background: '#1a1a1a',
+                            border: '1px solid #333333',
+                            borderRadius: '8px'
+                        }}>
                             <Statistic
                                 title={<span style={{ color: '#888888' }}>Failed</span>}
                                 value={failedCount}
@@ -889,7 +913,11 @@ const CampaignFinal = () => {
                         </Card>
                     </Col>
                     <Col xs={12} md={6}>
-                        <Card style={{ background: '#1a1a1a', border: '1px solid #333333' }}>
+                        <Card style={{
+                            background: '#1a1a1a',
+                            border: '1px solid #333333',
+                            borderRadius: '8px'
+                        }}>
                             <Statistic
                                 title={<span style={{ color: '#888888' }}>Error</span>}
                                 value={notExistCount}
@@ -951,7 +979,8 @@ const CampaignFinal = () => {
                         rowKey={(record, index) => `${record.phone}-${index}`}
                         pagination={false}
                         style={{
-                            background: '#0a0a0a'
+                            background: '#0a0a0a',
+                            borderRadius: '8px'
                         }}
                     />
 
@@ -983,7 +1012,9 @@ const CampaignFinal = () => {
                                 pageSize={recipientsPerPage}
                                 onChange={setCurrentPage}
                                 showSizeChanger={false}
-                                style={{ color: '#ffffff' }}
+                                style={{
+                                    color: '#ffffff'
+                                }}
                             />
                         </div>
                     )}

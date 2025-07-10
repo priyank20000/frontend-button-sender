@@ -33,6 +33,11 @@ api.interceptors.response.use(
   (error) => {
     console.error('API Error:', error.response?.status, error.response?.data?.message || error.message)
     
+    // Handle blob responses for file downloads
+    if (error.config?.responseType === 'blob' && error.response?.data instanceof Blob) {
+      return Promise.reject(error)
+    }
+    
     // Handle authentication errors
     if (error.response?.status === 401) {
       console.log('Authentication failed - clearing local storage')

@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react'
-import { 
-  Input, 
-  Badge, 
-  Checkbox, 
-  Modal, 
-  Table, 
+import {
+  Input,
+  Badge,
+  Checkbox,
+  Modal,
+  Table,
   Typography,
   Card,
   Space,
@@ -37,7 +37,7 @@ const BasicConfiguration = ({
   const [dialogCurrentPage, setDialogCurrentPage] = useState(1)
   const [tempSelectedInstances, setTempSelectedInstances] = useState([])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
-  
+
   // Table pagination state
   const [tableCurrentPage, setTableCurrentPage] = useState(1)
   const tableItemsPerPage = 5
@@ -52,7 +52,7 @@ const BasicConfiguration = ({
   const isAllSelected = selectedInstances.length === connectedInstances.length && connectedInstances.length > 0
 
   const handleInstanceSelection = (instanceId) => {
-    setTempSelectedInstances(prev => 
+    setTempSelectedInstances(prev =>
       prev.includes(instanceId)
         ? prev.filter(id => id !== instanceId)
         : [...prev, instanceId]
@@ -92,15 +92,15 @@ const BasicConfiguration = ({
   const filteredInstances = connectedInstances.filter(instance => {
     const name = instance.name || `Device ${instance._id.slice(-4)}`
     const phone = instance?.whatsapp?.phone || ''
-    return name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-           phone.includes(searchTerm)
+    return name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      phone.includes(searchTerm)
   })
 
   const dialogFilteredInstances = connectedInstances.filter(instance => {
     const name = instance.name || `Device ${instance._id.slice(-4)}`
     const phone = instance?.whatsapp?.phone || ''
-    return name.toLowerCase().includes(dialogSearchTerm.toLowerCase()) || 
-           phone.includes(dialogSearchTerm)
+    return name.toLowerCase().includes(dialogSearchTerm.toLowerCase()) ||
+      phone.includes(dialogSearchTerm)
   })
 
   const getDisplayText = () => {
@@ -163,7 +163,7 @@ const BasicConfiguration = ({
     const updatedSelection = selectedInstances.filter(id => id !== instanceId)
     setSelectedInstances(updatedSelection)
     setTempSelectedInstances(updatedSelection)
-    
+
     // Adjust table pagination if needed
     const newTotalPages = Math.ceil(updatedSelection.length / tableItemsPerPage)
     if (tableCurrentPage > newTotalPages && newTotalPages > 0) {
@@ -200,8 +200,8 @@ const BasicConfiguration = ({
           ) : (
             <Avatar
               size={40}
-              style={{ 
-                background: '#333333', 
+              style={{
+                background: '#333333',
                 color: '#ffffff',
                 border: '2px solid #555555'
               }}
@@ -244,9 +244,9 @@ const BasicConfiguration = ({
       title: 'Status',
       key: 'status',
       render: () => (
-        <Badge 
-          status="success" 
-          text={<span style={{ color: '#52c41a' }}>Connected</span>} 
+        <Badge
+          status="success"
+          text={<span style={{ color: '#52c41a' }}>Connected</span>}
         />
       )
     },
@@ -291,9 +291,9 @@ const BasicConfiguration = ({
       title: 'Status',
       key: 'status',
       render: () => (
-        <Badge 
-          status="success" 
-          text={<span style={{ color: '#52c41a' }}>Connected</span>} 
+        <Badge
+          status="success"
+          text={<span style={{ color: '#52c41a' }}>Connected</span>}
         />
       )
     },
@@ -359,10 +359,10 @@ const BasicConfiguration = ({
             </StyledButton>
           </Space>
         </div>
-        
+
         {connectedInstances.length === 0 ? (
-          <Card style={{ background: '#1a1a1a', border: '1px solid #333333' }}>
-            <div style={{ textAlign: 'center', padding: '32px' }}>
+          <Card style={{ background: '#1a1a1a', border: '1px solid #333333', borderRadius: '8px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '32px', textAlign: 'center' }}>
               <ExclamationCircleOutlined style={{ fontSize: '48px', color: '#faad14', marginBottom: '16px' }} />
               <Text style={{ color: '#888888' }}>
                 No connected instances available. Please connect at least one instance first.
@@ -390,12 +390,12 @@ const BasicConfiguration = ({
                 <Text style={{ color: '#ffffff' }}>
                   {getDisplayText()}
                 </Text>
-                <DownOutlined 
-                  style={{ 
-                    color: '#888888', 
+                <DownOutlined
+                  style={{
+                    color: '#888888',
                     transform: isDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)',
                     transition: 'transform 0.3s'
-                  }} 
+                  }}
                 />
               </div>
 
@@ -460,7 +460,7 @@ const BasicConfiguration = ({
                         >
                           <Checkbox
                             checked={tempSelectedInstances.includes(instance._id)}
-                            onChange={() => {}}
+                            onChange={() => { }}
                           />
                           <div style={{ position: 'relative', flexShrink: 0 }}>
                             {instance?.whatsapp?.profile ? (
@@ -472,8 +472,8 @@ const BasicConfiguration = ({
                             ) : (
                               <Avatar
                                 size={40}
-                                style={{ 
-                                  background: '#333333', 
+                                style={{
+                                  background: '#333333',
                                   color: '#ffffff',
                                   border: '2px solid #555555'
                                 }}
@@ -497,9 +497,9 @@ const BasicConfiguration = ({
                               <Text strong style={{ color: '#ffffff' }}>
                                 {instance.name || `Device ${instance._id.slice(-4)}`}
                               </Text>
-                              <Badge 
-                                status="success" 
-                                text={<span style={{ color: '#52c41a', fontSize: '12px' }}>Connected</span>} 
+                              <Badge
+                                status="success"
+                                text={<span style={{ color: '#52c41a', fontSize: '12px' }}>Connected</span>}
                               />
                             </div>
                             {instance?.whatsapp?.phone && (
@@ -553,7 +553,7 @@ const BasicConfiguration = ({
                     Selected Instances ({selectedInstances.length})
                   </Text>
                 </div>
-                
+
                 <Table
                   columns={tableColumns}
                   dataSource={tableCurrentData}
@@ -566,10 +566,10 @@ const BasicConfiguration = ({
                 />
 
                 {tableTotalPages > 1 && (
-                  <div style={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
-                    alignItems: 'center', 
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
                     marginTop: '16px',
                     paddingTop: '16px',
                     borderTop: '1px solid #333333'
@@ -664,10 +664,10 @@ const BasicConfiguration = ({
         />
 
         {dialogTotalPages > 1 && (
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'space-between', 
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
             marginTop: '24px',
             padding: '16px',
             background: '#0a0a0a',

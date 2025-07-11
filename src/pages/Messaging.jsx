@@ -815,6 +815,7 @@ const MessagingPage = memo(function MessagingPage() {
                   </Text>
                 </div>
               }
+              style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}
             >
               {!searchValue && statusFilter === 'all' && (
                 <StyledButton

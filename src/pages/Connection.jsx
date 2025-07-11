@@ -53,7 +53,7 @@ const Connection = memo(function Connection() {
   const [showSuccessDialog, setShowSuccessDialog] = useState(false)
   const [connectedInstance, setConnectedInstance] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
-  const [instancesPerPage, setInstancesPerPage] = useState(9)
+  const [instancesPerPage, setInstancesPerPage] = useState(10)
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [editInstanceId, setEditInstanceId] = useState(null)
   const [editInstanceName, setEditInstanceName] = useState('')
@@ -686,7 +686,7 @@ const Connection = memo(function Connection() {
                   }}
                   style={{ width: 120 }}
                 >
-                  {[9, 18, 27, 36, 45].map(size => (
+                  {[10, 20, 30, 40, 50, 100, 200, 300, 400, 500].map(size => (
                     <Option key={size} value={size}>{size} per page</Option>
                   ))}
                 </Select>

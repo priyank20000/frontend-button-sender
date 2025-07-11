@@ -16,7 +16,8 @@ import {
   CloseOutlined,
   DownOutlined,
   UserAddOutlined,
-  UsergroupDeleteOutlined
+  UsergroupDeleteOutlined,
+  DeleteOutlined
 } from '@ant-design/icons'
 import StyledButton from '../common/StyledButton'
 
@@ -36,6 +37,10 @@ const BasicConfiguration = ({
   const [dialogCurrentPage, setDialogCurrentPage] = useState(1)
   const [tempSelectedInstances, setTempSelectedInstances] = useState([])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  
+  // Table pagination state
+  const [tableCurrentPage, setTableCurrentPage] = useState(1)
+  const tableItemsPerPage = 5
   const itemsPerPage = 10
 
   useEffect(() => {
@@ -63,6 +68,7 @@ const BasicConfiguration = ({
   const handleDeselectAll = () => {
     setSelectedInstances([])
     setTempSelectedInstances([])
+    setTableCurrentPage(1) // Reset table pagination when deselecting all
   }
 
   const handleDialogSelectAll = () => {
@@ -123,6 +129,17 @@ const BasicConfiguration = ({
   const dialogPaginatedInstances = dialogFilteredInstances
     .slice((dialogCurrentPage - 1) * itemsPerPage, dialogCurrentPage * itemsPerPage)
 
+  // Get selected instances for table display
+  const selectedInstancesData = selectedInstances
+    .map(id => instances?.find(i => i._id === id))
+    .filter(instance => instance !== undefined)
+
+  // Table pagination calculations
+  const tableTotalPages = Math.ceil(selectedInstancesData.length / tableItemsPerPage)
+  const tableStartIndex = (tableCurrentPage - 1) * tableItemsPerPage
+  const tableEndIndex = tableStartIndex + tableItemsPerPage
+  const tableCurrentData = selectedInstancesData.slice(tableStartIndex, tableEndIndex)
+
   const handleDialogOpen = () => {
     setTempSelectedInstances([...selectedInstances])
     setIsDialogOpen(true)
@@ -133,6 +150,7 @@ const BasicConfiguration = ({
       setSelectedInstances(tempSelectedInstances)
       setIsDropdownOpen(false)
       setSearchTerm('')
+      setTableCurrentPage(1) // Reset table pagination when updating selection
     } else {
       setTempSelectedInstances([...selectedInstances])
     }
@@ -145,7 +163,108 @@ const BasicConfiguration = ({
     const updatedSelection = selectedInstances.filter(id => id !== instanceId)
     setSelectedInstances(updatedSelection)
     setTempSelectedInstances(updatedSelection)
+    
+    // Adjust table pagination if needed
+    const newTotalPages = Math.ceil(updatedSelection.length / tableItemsPerPage)
+    if (tableCurrentPage > newTotalPages && newTotalPages > 0) {
+      setTableCurrentPage(newTotalPages)
+    } else if (updatedSelection.length === 0) {
+      setTableCurrentPage(1)
+    }
   }
+
+  // Table columns for selected instances
+  const tableColumns = [
+    {
+      title: 'SN',
+      key: 'sn',
+      width: 60,
+      render: (_, __, index) => (
+        <Text style={{ color: '#ffffff' }}>
+          {tableStartIndex + index + 1}
+        </Text>
+      )
+    },
+    {
+      title: 'Avatar',
+      key: 'avatar',
+      width: 80,
+      render: (_, record) => (
+        <div style={{ position: 'relative', display: 'inline-block' }}>
+          {record?.whatsapp?.profile ? (
+            <Avatar
+              src={record.whatsapp.profile}
+              size={40}
+              style={{ border: '2px solid #555555' }}
+            />
+          ) : (
+            <Avatar
+              size={40}
+              style={{ 
+                background: '#333333', 
+                color: '#ffffff',
+                border: '2px solid #555555'
+              }}
+            >
+              {(record.name || `D${record._id.slice(-2)}`).charAt(0).toUpperCase()}
+            </Avatar>
+          )}
+          <div style={{
+            position: 'absolute',
+            bottom: '-2px',
+            right: '-2px',
+            width: '12px',
+            height: '12px',
+            borderRadius: '50%',
+            background: record?.whatsapp?.status?.toLowerCase() === 'connected' ? '#52c41a' : '#ff4d4f',
+            border: '2px solid #0a0a0a'
+          }} />
+        </div>
+      )
+    },
+    {
+      title: 'Name',
+      key: 'name',
+      render: (_, record) => (
+        <Text style={{ color: '#ffffff' }}>
+          {record.name || `Device ${record._id.slice(-4)}`}
+        </Text>
+      )
+    },
+    {
+      title: 'Phone',
+      key: 'phone',
+      render: (_, record) => (
+        <Text style={{ color: '#888888' }}>
+          {record?.whatsapp?.phone || '-'}
+        </Text>
+      )
+    },
+    {
+      title: 'Status',
+      key: 'status',
+      render: () => (
+        <Badge 
+          status="success" 
+          text={<span style={{ color: '#52c41a' }}>Connected</span>} 
+        />
+      )
+    },
+    {
+      title: 'Action',
+      key: 'action',
+      width: 80,
+      render: (_, record) => (
+        <StyledButton
+          variant="danger"
+          size="small"
+          icon={<DeleteOutlined />}
+          onClick={() => handleRemoveInstance(record._id)}
+          style={{ minWidth: 'auto' }}
+        />
+      )
+    }
+  ]
 
   const columns = [
     {
@@ -419,6 +538,7 @@ const BasicConfiguration = ({
               )}
             </div>
 
+            {/* Selected Instances Table */}
             {selectedInstances.length > 0 && (
               <Card
                 style={{
@@ -426,57 +546,48 @@ const BasicConfiguration = ({
                   border: '1px solid #333333',
                   borderRadius: '8px'
                 }}
+                bodyStyle={{ padding: '16px' }}
               >
-                <Space wrap>
-                  {selectedInstances.slice(0, 5).map(instanceId => {
-                    const instance = instances?.find(i => i._id === instanceId)
-                    return (
-                      <Badge
-                        key={instanceId}
-                        count={
-                          <StyledButton
-                            variant="danger"
-                            size="small"
-                            icon={<CloseOutlined />}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleRemoveInstance(instanceId)
-                            }}
-                            style={{ 
-                              minWidth: 'auto',
-                              width: '16px',
-                              height: '16px',
-                              padding: 0
-                            }}
-                          />
-                        }
-                        offset={[8, -8]}
-                      >
-                        <Badge 
-                          status="processing" 
-                          text={
-                            <span style={{ color: '#ffffff' }}>
-                              {instance?.name || `Device ${instanceId.slice(-4)}`}
-                            </span>
-                          } 
-                        />
-                      </Badge>
-                    )
-                  })}
-                  {selectedInstances.length > 5 && (
-                    <Badge 
-                      status="default" 
-                      text={
-                        <span 
-                          style={{ color: '#888888', cursor: 'pointer' }}
-                          onClick={() => setIsDialogOpen(true)}
-                        >
-                          +{selectedInstances.length - 5} more
-                        </span>
-                      } 
+                <div style={{ marginBottom: '16px' }}>
+                  <Text strong style={{ color: '#ffffff', fontSize: '16px' }}>
+                    Selected Instances ({selectedInstances.length})
+                  </Text>
+                </div>
+                
+                <Table
+                  columns={tableColumns}
+                  dataSource={tableCurrentData}
+                  rowKey="_id"
+                  pagination={false}
+                  size="small"
+                  style={{
+                    background: '#0a0a0a'
+                  }}
+                />
+
+                {tableTotalPages > 1 && (
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center', 
+                    marginTop: '16px',
+                    paddingTop: '16px',
+                    borderTop: '1px solid #333333'
+                  }}>
+                    <Text style={{ color: '#888888', fontSize: '14px' }}>
+                      Showing {tableStartIndex + 1}-{Math.min(tableEndIndex, selectedInstancesData.length)} of {selectedInstancesData.length} selected instances
+                    </Text>
+                    <Pagination
+                      current={tableCurrentPage}
+                      total={selectedInstancesData.length}
+                      pageSize={tableItemsPerPage}
+                      onChange={setTableCurrentPage}
+                      showSizeChanger={false}
+                      size="small"
+                      style={{ color: '#ffffff' }}
                     />
-                  )}
-                </Space>
+                  </div>
+                )}
               </Card>
             )}
           </>

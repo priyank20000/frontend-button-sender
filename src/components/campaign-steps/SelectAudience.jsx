@@ -1087,23 +1087,38 @@ const SelectAudience = ({
         title={<span style={{ color: '#ffffff' }}>Add New Contact</span>}
         open={isContactDialogOpen}
         onCancel={() => setIsContactDialogOpen(false)}
-        footer={[
-          <StyledButton
-            key="cancel"
-            variant="secondary"
-            onClick={() => setIsContactDialogOpen(false)}
-          >
-            Cancel
-          </StyledButton>,
-          <StyledButton
-            key="submit"
-            variant="primary"
-            onClick={handleContactSubmit}
-          >
-            Add
-          </StyledButton>
-        ]}
+        footer={
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <StyledButton
+              variant="secondary"
+              onClick={() => setIsContactDialogOpen(false)}
+            >
+              Cancel
+            </StyledButton>
+            <StyledButton
+              variant="primary"
+              onClick={handleContactSubmit}
+            >
+              Add
+            </StyledButton>
+          </div>
+        }
         width={800}
+        styles={{
+          header: {
+            backgroundColor: 'transparent',
+            borderBottom: 'none',
+            padding: '20px 24px 0'
+          },
+          content: {
+            background: '#0a0a0a',
+            border: '1px solid #1a1a1a',
+            borderRadius: '12px'
+          },
+          mask: {
+            backgroundColor: 'rgba(0, 0, 0, 0.85)'
+          }
+        }}
       >
         <Form
           form={contactForm}
